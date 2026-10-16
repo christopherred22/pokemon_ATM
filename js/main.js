@@ -19,6 +19,7 @@
   var ICONO = { dep: "i-dep", ret: "i-ret", pag: "i-pag", sal: "i-sal" };
   var VISTAS = ["acciones", "deposito", "retiro", "saldo", "servicios", "historial", "grafico"];
   var FLUJOS = ["deposito", "retiro", "saldo", "servicios"];
+  var TITULOS = { login: "Inicio de sesión", acciones: "Inicio", deposito: "Depósito", retiro: "Retiro", saldo: "Mi saldo", servicios: "Pago de servicios", historial: "Historial", grafico: "Gráfico" };
 
   /* ---------- Datos iniciales (usuario de prueba). Montos en centavos ---------- */
   function datosIniciales() {
@@ -382,6 +383,7 @@
     $("#app").hidden = h === "login";
     VISTAS.forEach(function (v) { $("#" + v).hidden = v !== h; });
     document.body.setAttribute("data-view", h);
+    document.title = (TITULOS[h] || "Cajero automático") + " | Pokémon Bank";
     document.body.setAttribute("data-flow", FLUJOS.indexOf(h) >= 0 ? "1" : "0");
     $$("[data-nav]").forEach(function (a) {
       var on = a.getAttribute("data-nav") === (FLUJOS.indexOf(h) >= 0 ? "acciones" : h);
