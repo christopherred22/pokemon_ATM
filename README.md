@@ -66,3 +66,10 @@ Los datos (saldo e historial) se guardan en `localStorage`; el botón «Restable
 - JavaScript sin dependencias
 - Git y GitHub para el versionamiento
 - Librerías investigadas con ejemplo en `ejemplos/`: SweetAlert, jsPDF, Chart.js y ValidateJS
+
+## Repositorio y pruebas rápidas
+
+- Repositorio: https://github.com/christopherred22/pokemon_ATM
+- PIN de prueba: `1234` (3 intentos; luego se bloquea 30 s).
+- Límite de retiro: $500 por día. Depósito máximo: $5,000 por operación.
+- Para reiniciar los datos: botón «Restablecer datos de prueba» en el historial.
