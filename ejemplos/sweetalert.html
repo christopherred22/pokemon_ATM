@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SweetAlert | Ejemplos Pokémon Bank</title>
+  <link rel="stylesheet" href="../css/bootstrap.min.css">
+  <link rel="stylesheet" href="../css/styles.css">
+</head>
+<body>
+  <main class="container pk-main" style="max-width: 640px;">
+    <section class="pk-card">
+      <h1 class="h4">Ejemplo SweetAlert</h1>
+      <p class="text-muted">Alertas bonitas para confirmar operaciones del cajero.</p>
+
+      <button id="btn-exito" class="pk-btn pk-btn-primary pk-btn-block mb-3">1. Alerta de éxito (depósito realizado)</button>
+      <button id="btn-error" class="pk-btn pk-btn-danger pk-btn-block mb-3">2. Alerta de error (PIN incorrecto)</button>
+      <button id="btn-confirmar" class="pk-btn pk-btn-yellow pk-btn-block">3. Confirmación (¿desea retirar $60?)</button>
+    </section>
+  </main>
+
+  <!-- SweetAlert 2.1.2 (https://sweetalert.js.org/) -->
+  <script src="https://unpkg.com/sweetalert@2.1.2/dist/sweetalert.min.js"></script>
+  <script>
+    // 1. Éxito
+    document.getElementById("btn-exito").addEventListener("click", function () {
+      swal("¡Depósito exitoso!", "Se agregaron $300.00 a tu cuenta.", "success");
+    });
+
+    // 2. Error
+    document.getElementById("btn-error").addEventListener("click", function () {
+      swal("PIN incorrecto", "Verifica tu PIN de 4 dígitos e inténtalo de nuevo.", "error");
+    });
+
+    // 3. Confirmación con botones personalizados (devuelve una promesa)
+    document.getElementById("btn-confirmar").addEventListener("click", function () {
+      swal({
+        title: "¿Confirmar retiro?",
+        text: "Se descontarán $60.00 de tu saldo.",
+        icon: "warning",
+        buttons: ["Cancelar", "Sí, retirar"],
+        dangerMode: true
+      }).then(function (confirmo) {
+        if (confirmo) {
+          swal("Retiro realizado", "Retira tu efectivo.", "success");
+        } else {
+          swal("Operación cancelada");
+        }
+      });
+    });
+  </script>
+</body>
+</html>

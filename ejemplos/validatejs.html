@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ValidateJS | Ejemplos Pokémon Bank</title>
+  <link rel="stylesheet" href="../css/bootstrap.min.css">
+  <link rel="stylesheet" href="../css/styles.css">
+</head>
+<body>
+  <main class="container pk-main" style="max-width: 520px;">
+    <section class="pk-card">
+      <h1 class="h4">Ejemplo ValidateJS</h1>
+      <p class="text-muted">Valida el PIN (4 dígitos) y un monto antes de procesar la operación.</p>
+
+      <div class="pk-field">
+        <label class="pk-label" for="pin">PIN</label>
+        <input type="password" id="pin" class="form-control pk-input" maxlength="4" placeholder="••••">
+      </div>
+      <div class="pk-field">
+        <label class="pk-label" for="monto">Monto a retirar</label>
+        <input type="text" id="monto" class="form-control pk-input" placeholder="Ej. 40">
+      </div>
+
+      <div id="resultado" class="mb-3" role="alert"></div>
+      <button id="btn-validar" class="pk-btn pk-btn-primary pk-btn-block">Validar</button>
+    </section>
+  </main>
+
+  <!-- Validate.js 0.13.1 (https://validatejs.org/) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/validate.js/0.13.1/validate.min.js"></script>
+  <script>
+    // Reglas de validación
+    const restricciones = {
+      pin: {
+        presence: { message: "es obligatorio" },
+        format: { pattern: "^[0-9]{4}$", message: "debe tener exactamente 4 dígitos numéricos" }
+      },
+      monto: {
+        presence: { message: "es obligatorio" },
+        numericality: {
+          greaterThan: 0,
+          lessThanOrEqualTo: 500,
+          divisibleBy: 5,
+          message: "debe ser un número positivo, múltiplo de 5 y no mayor a 500"
+        }
+      }
+    };
+
+    document.getElementById("btn-validar").addEventListener("click", function () {
+      const datos = {
+        pin: document.getElementById("pin").value,
+        monto: document.getElementById("monto").value
+      };
+
+      // validate() devuelve undefined si todo es correcto o un objeto con los errores
+      const errores = validate(datos, restricciones);
+      const caja = document.getElementById("resultado");
+
+      if (errores) {
+        const lista = Object.values(errores).flat();
+        caja.innerHTML = '<div class="text-danger">' + lista.join("<br>") + "</div>";
+      } else {
+        caja.innerHTML = '<div class="text-success">¡Datos válidos! La operación puede continuar.</div>';
+      }
+    });
+  </script>
+</body>
+</html>

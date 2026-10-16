@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chart.js | Ejemplos Pokémon Bank</title>
+  <link rel="stylesheet" href="../css/bootstrap.min.css">
+  <link rel="stylesheet" href="../css/styles.css">
+</head>
+<body>
+  <main class="container pk-main" style="max-width: 760px;">
+    <section class="pk-card mb-4">
+      <h1 class="h4">Ejemplo Chart.js</h1>
+      <p class="text-muted">Dos gráficos de las transacciones del usuario de prueba.</p>
+      <div style="max-width: 360px; margin: 0 auto;">
+        <canvas id="grafico-dona" aria-label="Transacciones por tipo" role="img"></canvas>
+      </div>
+    </section>
+    <section class="pk-card">
+      <canvas id="grafico-barras" aria-label="Monto por tipo" role="img"></canvas>
+    </section>
+  </main>
+
+  <!-- Chart.js 4.4.1 (https://www.chartjs.org/) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>
+    const colores = ["#12a874", "#e0442f", "#3d5bd9", "#f59e0b"];
+
+    // 1. Dona: cantidad de transacciones por tipo
+    new Chart(document.getElementById("grafico-dona"), {
+      type: "doughnut",
+      data: {
+        labels: ["Depósitos", "Retiros", "Pago de servicios", "Consultas de saldo"],
+        datasets: [{ data: [3, 3, 4, 3], backgroundColor: colores }]
+      },
+      options: { plugins: { title: { display: true, text: "Transacciones por tipo" } } }
+    });
+
+    // 2. Barras: monto acumulado por tipo
+    new Chart(document.getElementById("grafico-barras"), {
+      type: "bar",
+      data: {
+        labels: ["Depósitos", "Retiros", "Pago de servicios"],
+        datasets: [{ label: "Monto (USD)", data: [950, 200, 108.05], backgroundColor: colores }]
+      },
+      options: {
+        plugins: { legend: { display: false }, title: { display: true, text: "Monto acumulado por tipo" } },
+        scales: { y: { beginAtZero: true } }
+      }
+    });
+  </script>
+</body>
+</html>

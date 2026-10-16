@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover">
+  <meta name="description" content="Pokémon Bank - Simulador de cajero automático (ATM) en una sola página.">
+  <meta name="theme-color" content="#161b5c">
+  <title>Pokémon Bank | Cajero automático</title>
+
+  <!-- Framework CSS: Bootstrap 4.6.2 (copia local en css/, sin depender de internet) -->
+  <link rel="stylesheet" href="css/bootstrap.min.css">
+  <!-- Estilos propios -->
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="icon" type="image/svg+xml" href="images/pokeball.svg">
+</head>
+<body data-view="login">
+
+  <!-- Iconos (sprite SVG): se reutilizan con <use href="#i-..."> y heredan el color del texto -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="i-dep" viewBox="0 0 24 24"><path d="M12 3v11M8 10l4 4 4-4"/><path d="M4 15v3a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-3"/></symbol>
+      <symbol id="i-ret" viewBox="0 0 24 24"><path d="M12 15V4M8 8l4-4 4 4"/><path d="M4 15v3a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-3"/></symbol>
+      <symbol id="i-sal" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M3 10h18M7 15h3"/></symbol>
+      <symbol id="i-pag" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
+      <symbol id="i-luz" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
+      <symbol id="i-net" viewBox="0 0 24 24"><path d="M2 9a15 15 0 0 1 20 0M5 12.5a10 10 0 0 1 14 0M8.5 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19.5" r="1" fill="currentColor"/></symbol>
+      <symbol id="i-tel" viewBox="0 0 24 24"><rect x="7" y="2" width="10" height="20" rx="2.5"/><path d="M11 18h2"/></symbol>
+      <symbol id="i-agua" viewBox="0 0 24 24"><path d="M12 2.5S5 10 5 14.5a7 7 0 0 0 14 0C19 10 12 2.5 12 2.5z"/></symbol>
+      <symbol id="i-home" viewBox="0 0 24 24"><path d="M3 11 12 3l9 8"/><path d="M5 10v10h5v-6h4v6h5V10"/></symbol>
+      <symbol id="i-his" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></symbol>
+      <symbol id="i-gra" viewBox="0 0 24 24"><path d="M21 12A9 9 0 1 1 12 3v9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></symbol>
+      <symbol id="i-out" viewBox="0 0 24 24"><path d="M9 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h3"/><path d="M16 8l4 4-4 4M20 12H9"/></symbol>
+      <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
+      <symbol id="i-del" viewBox="0 0 24 24"><path d="M21 5H9l-6 7 6 7h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1z"/><path d="m12 9 5 6m0-6-5 6"/></symbol>
+      <symbol id="i-ok" viewBox="0 0 24 24"><path d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+    </defs>
+  </svg>
+
+  <!-- =====================================================================
+       APLICACIÓN DE UNA SOLA PÁGINA
+       js/main.js muestra una vista según el enlace (#...) y exige el PIN.
+       ===================================================================== -->
+
+  <!-- ================= PANTALLA 1: LOGIN ================= -->
+  <section id="login" class="pk-login-view" aria-label="Inicio de sesión">
+    <main class="container pk-login-wrap">
+      <section class="pk-login-card" aria-labelledby="titulo-login">
+        <header class="pk-login-head">
+          <img src="images/logo-pokemon-bank.png" alt="Logotipo de Pokémon Bank">
+          <h1 id="titulo-login">Cajero automático</h1>
+          <p id="login-msg">Ingresa tu PIN de 4 dígitos</p>
+        </header>
+
+        <form class="pk-login-form" id="form-login" action="#acciones" method="post" autocomplete="off" novalidate>
+          <label class="sr-only" for="pin">PIN de seguridad</label>
+          <input type="password" id="pin" class="form-control pk-pin" inputmode="none"
+                 pattern="[0-9]{4}" minlength="4" maxlength="4" placeholder="••••"
+                 autocomplete="off" required aria-describedby="pin-error ayuda-pin">
+          <small id="ayuda-pin" class="pk-help">Solo números · exactamente 4 dígitos</small>
+          <div id="pin-error" class="pk-error" role="alert" hidden></div>
+
+          <div class="pk-keypad" data-for="pin" data-dot="0" aria-label="Teclado numérico"></div>
+
+          <button type="submit" id="btn-login" class="btn pk-btn pk-btn-yellow btn-block">Ingresar</button>
+
+          <p class="pk-demo"><strong>Usuario de prueba:</strong> Ash Ketchum · PIN <strong>1234</strong></p>
+        </form>
+      </section>
+    </main>
+    <footer class="pk-footer">© 2026 Pokémon Bank · Proyecto de Cátedra UDB · Simulación con fines académicos</footer>
+  </section>
+
+  <!-- ================= APLICACIÓN (tras iniciar sesión) ================= -->
+  <div class="pk-app" id="app" hidden>
+
+    <!-- Panel lateral (escritorio) -->
+    <aside class="pk-sidebar d-none d-lg-flex" aria-label="Panel de navegación">
+      <a class="pk-side-brand" href="#acciones">
+        <img src="images/pokeball.svg" alt="">
+        <span>Pokémon Bank</span>
+      </a>
+      <div class="pk-side-user">
+        <div class="pk-avatar" aria-hidden="true">AK</div>
+        <div><strong>Ash Ketchum</strong><small>PKB-2026-000151</small></div>
+      </div>
+      <nav class="pk-side-nav" aria-label="Secciones">
+        <a href="#acciones" data-nav="acciones"><svg class="pk-i"><use href="#i-home"/></svg>Inicio</a>
+        <a href="#historial" data-nav="historial"><svg class="pk-i"><use href="#i-his"/></svg>Historial</a>
+        <a href="#grafico" data-nav="grafico"><svg class="pk-i"><use href="#i-gra"/></svg>Gráfico</a>
+        <a href="#login" class="pk-side-exit"><svg class="pk-i"><use href="#i-out"/></svg>Salir</a>
+      </nav>
+    </aside>
+
+    <!-- Barra superior (móvil y tableta) -->
+    <header class="pk-topbar d-flex d-lg-none">
+      <img src="images/pokeball.svg" alt="">
+      <div><strong>Ash Ketchum</strong><small>PKB-2026-000151</small></div>
+    </header>
+
+    <!-- ===== Contenido ===== -->
+    <main class="pk-content">
+
+      <!-- PANTALLA 2: ACCIONES -->
+      <section id="acciones" class="view" aria-labelledby="t-acciones">
+        <article class="pk-hero" aria-label="Datos de la cuenta">
+          <div class="pk-hero-top">
+            <span class="pk-chip-card" aria-hidden="true"></span>
+            <span class="pk-hero-tag">Cuenta de ahorro</span>
+          </div>
+          <small>Bienvenido a tu cajero</small>
+          <h1 id="t-acciones">Ash Ketchum</h1>
+          <div class="pk-acct">N.º de cuenta <span>PKB-2026-000151</span></div>
+        </article>
+
+        <h2 class="pk-h2">¿Qué deseas hacer?</h2>
+        <section class="row pk-grid" aria-label="Transacciones disponibles">
+          <div class="col-6 col-lg-3">
+            <a class="pk-tile t-dep" href="#deposito"><span class="pk-tile-ico"><svg class="pk-i"><use href="#i-dep"/></svg></span><b>Depositar</b><small>Agrega dinero</small></a>
+          </div>
+          <div class="col-6 col-lg-3">
+            <a class="pk-tile t-ret" href="#retiro"><span class="pk-tile-ico"><svg class="pk-i"><use href="#i-ret"/></svg></span><b>Retirar</b><small>Efectivo al instante</small></a>
+          </div>
+          <div class="col-6 col-lg-3">
+            <a class="pk-tile t-sal" href="#saldo" data-consulta><span class="pk-tile-ico"><svg class="pk-i"><use href="#i-sal"/></svg></span><b>Mi saldo</b><small>Dinero disponible</small></a>
+          </div>
+          <div class="col-6 col-lg-3">
+            <a class="pk-tile t-pag" href="#servicios"><span class="pk-tile-ico"><svg class="pk-i"><use href="#i-pag"/></svg></span><b>Pagar servicios</b><small>Luz, agua, internet…</small></a>
+          </div>
+        </section>
+
+        <section class="pk-quick card" aria-label="Retiro rápido">
+          <div class="pk-quick-head"><b>Retiro rápido</b><small>Un toque y confirmas</small></div>
+          <div class="pk-quick-btns">
+            <button type="button" class="btn pk-pill" data-rapido="20">$20</button>
+            <button type="button" class="btn pk-pill" data-rapido="40">$40</button>
+            <button type="button" class="btn pk-pill" data-rapido="100">$100</button>
+          </div>
+        </section>
+
+        <a class="pk-last card" href="#historial" id="ultimo" aria-label="Ver historial de transacciones"></a>
+
+        <div class="text-center mt-4 d-none d-lg-block">
+          <a class="btn pk-btn pk-btn-danger" href="#login">Salir de la sesión</a>
+        </div>
+      </section>
+
+      <!-- PANTALLA: DEPÓSITO -->
+      <section id="deposito" class="view" aria-labelledby="t-deposito">
+        <header class="pk-flow-head t-dep">
+          <a href="#acciones" class="pk-back" aria-label="Volver al inicio"><svg class="pk-i"><use href="#i-back"/></svg></a>
+          <span class="pk-tile-ico"><svg class="pk-i"><use href="#i-dep"/></svg></span>
+          <div><h1 id="t-deposito">Depósito</h1><p>¿Cuánto deseas depositar?</p></div>
+        </header>
+        <form class="pk-flow-body" id="form-deposito" action="#acciones" method="post" novalidate>
+          <label class="pk-label" for="monto-deposito">Monto a depositar</label>
+          <div class="pk-display"><span>$</span>
+            <input type="text" id="monto-deposito" name="monto" class="form-control" inputmode="none" autocomplete="off"
+                   pattern="[0-9]{1,4}(\.[0-9]{1,2})?" placeholder="0.00" required aria-describedby="ayuda-dep">
+          </div>
+          <small id="ayuda-dep" class="pk-help pk-help-left">Máximo por operación: $5,000.00</small>
+          <div class="pk-add" aria-label="Sumar monto rápido">
+            <button type="button" class="btn pk-pill" data-suma="20">+ $20</button>
+            <button type="button" class="btn pk-pill" data-suma="50">+ $50</button>
+            <button type="button" class="btn pk-pill" data-suma="100">+ $100</button>
+            <button type="button" class="btn pk-pill" data-suma="500">+ $500</button>
+          </div>
+          <div class="pk-keypad" data-for="monto-deposito" aria-label="Teclado numérico"></div>
+          <div class="pk-flow-foot">
+            <a href="#acciones" class="btn pk-btn pk-btn-light">Cancelar</a>
+            <button type="submit" class="btn pk-btn pk-btn-primary">Continuar</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- PANTALLA: RETIRO -->
+      <section id="retiro" class="view" aria-labelledby="t-retiro">
+        <header class="pk-flow-head t-ret">
+          <a href="#acciones" class="pk-back" aria-label="Volver al inicio"><svg class="pk-i"><use href="#i-back"/></svg></a>
+          <span class="pk-tile-ico"><svg class="pk-i"><use href="#i-ret"/></svg></span>
+          <div><h1 id="t-retiro">Retiro</h1><p>Toca el monto que necesitas</p></div>
+        </header>
+        <form class="pk-flow-body" id="form-retiro" action="#acciones" method="post" novalidate>
+          <div class="pk-amounts" role="group" aria-label="Montos rápidos">
+            <button type="button" class="btn pk-amount-btn" data-rapido="20">$20</button>
+            <button type="button" class="btn pk-amount-btn" data-rapido="40">$40</button>
+            <button type="button" class="btn pk-amount-btn" data-rapido="60">$60</button>
+            <button type="button" class="btn pk-amount-btn" data-rapido="100">$100</button>
+            <button type="button" class="btn pk-amount-btn" data-rapido="200">$200</button>
+            <button type="button" class="btn pk-amount-btn" data-rapido="500">$500</button>
+          </div>
+          <p class="pk-limit">Disponible hoy para retirar: <b id="disp-hoy">$500.00</b> <span>(límite diario $500.00)</span></p>
+
+          <button type="button" class="btn pk-btn pk-btn-light btn-block" id="btn-otro" aria-expanded="false" aria-controls="otro-monto">Otro monto</button>
+          <div id="otro-monto" hidden>
+            <label class="pk-label" for="monto-retiro">Escribe el monto</label>
+            <div class="pk-display"><span>$</span>
+              <input type="text" id="monto-retiro" name="monto" class="form-control" inputmode="none" autocomplete="off"
+                     pattern="[0-9]{1,3}" placeholder="0" aria-describedby="ayuda-ret">
+            </div>
+            <small id="ayuda-ret" class="pk-help pk-help-left">Múltiplos de $5</small>
+            <div class="pk-keypad" data-for="monto-retiro" data-dot="0" aria-label="Teclado numérico"></div>
+            <div class="pk-flow-foot">
+              <a href="#acciones" class="btn pk-btn pk-btn-light">Cancelar</a>
+              <button type="submit" class="btn pk-btn pk-btn-primary">Continuar</button>
+            </div>
+          </div>
+          <div class="pk-flow-foot" id="foot-ret">
+            <a href="#acciones" class="btn pk-btn pk-btn-light btn-block">Cancelar</a>
+          </div>
+        </form>
+      </section>
+
+      <!-- PANTALLA: CONSULTA DE SALDO -->
+      <section id="saldo" class="view" aria-labelledby="t-saldo">
+        <header class="pk-flow-head t-sal">
+          <a href="#acciones" class="pk-back" aria-label="Volver al inicio"><svg class="pk-i"><use href="#i-back"/></svg></a>
+          <span class="pk-tile-ico"><svg class="pk-i"><use href="#i-sal"/></svg></span>
+          <div><h1 id="t-saldo">Consulta de saldo</h1><p>Tu dinero disponible</p></div>
+        </header>
+        <div class="pk-flow-body">
+          <div class="pk-balance">
+            <small>Saldo disponible</small>
+            <div class="pk-amount" data-saldo></div>
+          </div>
+          <ul class="pk-info-list">
+            <li><span>Titular</span><span>Ash Ketchum</span></li>
+            <li><span>N.º de cuenta</span><span>PKB-2026-000151</span></li>
+            <li><span>Tipo de cuenta</span><span>Ahorro</span></li>
+            <li><span>Fecha de consulta</span><span id="fecha-saldo"></span></li>
+          </ul>
+          <div class="pk-flow-foot"><a href="#acciones" class="btn pk-btn pk-btn-primary btn-block">Aceptar</a></div>
+        </div>
+      </section>
+
+      <!-- PANTALLA: PAGO DE SERVICIOS -->
+      <section id="servicios" class="view" aria-labelledby="t-servicios">
+        <header class="pk-flow-head t-pag">
+          <a href="#acciones" class="pk-back" aria-label="Volver al inicio"><svg class="pk-i"><use href="#i-back"/></svg></a>
+          <span class="pk-tile-ico"><svg class="pk-i"><use href="#i-pag"/></svg></span>
+          <div><h1 id="t-servicios">Pago de servicios</h1><p>Elige qué deseas pagar</p></div>
+        </header>
+        <form class="pk-flow-body" id="form-servicios" action="#acciones" method="post" novalidate>
+          <div class="pk-services" role="radiogroup" aria-label="Servicio">
+            <input type="radio" name="servicio" id="s-luz" value="energia"><label for="s-luz"><svg class="pk-i"><use href="#i-luz"/></svg>Energía eléctrica</label>
+            <input type="radio" name="servicio" id="s-net" value="internet"><label for="s-net"><svg class="pk-i"><use href="#i-net"/></svg>Internet</label>
+            <input type="radio" name="servicio" id="s-tel" value="telefonia"><label for="s-tel"><svg class="pk-i"><use href="#i-tel"/></svg>Telefonía</label>
+            <input type="radio" name="servicio" id="s-agua" value="agua"><label for="s-agua"><svg class="pk-i"><use href="#i-agua"/></svg>Agua potable</label>
+          </div>
+
+          <div class="row">
+            <div class="col-md-6">
+              <label class="pk-label" for="contrato">N.º de contrato o cliente</label>
+              <input type="text" id="contrato" name="contrato" class="form-control pk-input" inputmode="none" maxlength="12"
+                     pattern="[0-9]{6,12}" placeholder="Ej. 123456789" autocomplete="off" data-pad aria-describedby="ayuda-con">
+              <small id="ayuda-con" class="pk-help pk-help-left">Entre 6 y 12 dígitos</small>
+            </div>
+            <div class="col-md-6">
+              <label class="pk-label" for="monto-servicio">Monto a pagar</label>
+              <div class="pk-display pk-display-sm"><span>$</span>
+                <input type="text" id="monto-servicio" name="monto" class="form-control" inputmode="none" autocomplete="off"
+                       pattern="[0-9]{1,4}(\.[0-9]{1,2})?" placeholder="0.00" data-pad>
+              </div>
+            </div>
+          </div>
+
+          <div class="pk-keypad" id="pad-servicios" data-for="contrato" aria-label="Teclado numérico"></div>
+          <div class="pk-flow-foot">
+            <a href="#acciones" class="btn pk-btn pk-btn-light">Cancelar</a>
+            <button type="submit" class="btn pk-btn pk-btn-primary">Continuar</button>
+          </div>
+        </form>
+      </section>
+
+      <!-- PANTALLA 3: HISTORIAL -->
+      <section id="historial" class="view" aria-labelledby="t-historial">
+        <header class="mb-3">
+          <h1 id="t-historial" class="pk-title">Historial de transacciones</h1>
+          <p class="text-muted mb-0">Todas las operaciones de tu cuenta, de la más reciente a la más antigua</p>
+        </header>
+
+        <section class="row pk-stats" aria-label="Resumen por tipo de transacción">
+          <div class="col-6 col-md-3"><div class="pk-stat dep"><small>Depósitos</small><strong>$0.00</strong><span>0 transacciones</span></div></div>
+          <div class="col-6 col-md-3"><div class="pk-stat ret"><small>Retiros</small><strong>$0.00</strong><span>0 transacciones</span></div></div>
+          <div class="col-6 col-md-3"><div class="pk-stat pag"><small>Pago de servicios</small><strong>$0.00</strong><span>0 transacciones</span></div></div>
+          <div class="col-6 col-md-3"><div class="pk-stat sal"><small>Consultas de saldo</small><strong>0</strong><span>Sin movimiento de dinero</span></div></div>
+        </section>
+
+        <section class="card pk-panel" aria-label="Listado de transacciones">
+          <div class="pk-filters" role="group" aria-label="Filtrar por tipo">
+            <button type="button" class="btn pk-pill active" data-filtro="all" aria-pressed="true">Todas</button>
+            <button type="button" class="btn pk-pill" data-filtro="dep" aria-pressed="false">Depósitos</button>
+            <button type="button" class="btn pk-pill" data-filtro="ret" aria-pressed="false">Retiros</button>
+            <button type="button" class="btn pk-pill" data-filtro="pag" aria-pressed="false">Servicios</button>
+            <button type="button" class="btn pk-pill" data-filtro="sal" aria-pressed="false">Consultas</button>
+          </div>
+          <ul class="pk-txlist" id="lista-tx" aria-live="polite"></ul>
+          <button type="button" class="btn pk-btn pk-btn-light btn-block" id="btn-mas" hidden>Ver más</button>
+        </section>
+
+        <div class="pk-actions">
+          <button type="button" id="btn-reset" class="btn pk-btn pk-btn-light">Restablecer datos de prueba</button>
+          <a class="btn pk-btn pk-btn-primary" href="#grafico">Ver gráfico</a>
+        </div>
+      </section>
+
+      <!-- PANTALLA 4: GRÁFICO -->
+      <section id="grafico" class="view" aria-labelledby="t-grafico">
+        <header class="mb-3">
+          <h1 id="t-grafico" class="pk-title">Análisis de transacciones</h1>
+          <p class="text-muted mb-0">Tus operaciones por tipo</p>
+        </header>
+
+        <div class="row">
+          <div class="col-lg-6 mb-3">
+            <section class="card pk-panel h-100" aria-labelledby="g1">
+              <h2 id="g1" class="pk-h2">Transacciones por tipo</h2>
+              <div class="pk-donut-wrap">
+                <div class="pk-donut" data-total="0" role="img" aria-label="Gráfico de dona"></div>
+                <ul class="pk-legend">
+                  <li><i class="c-dep"></i> Depósitos <em></em></li>
+                  <li><i class="c-ret"></i> Retiros <em></em></li>
+                  <li><i class="c-pag"></i> Pago de servicios <em></em></li>
+                  <li><i class="c-sal"></i> Consultas de saldo <em></em></li>
+                </ul>
+              </div>
+            </section>
+          </div>
+
+          <div class="col-lg-6 mb-3">
+            <section class="card pk-panel h-100" aria-labelledby="g2">
+              <h2 id="g2" class="pk-h2">Monto acumulado por tipo</h2>
+              <div class="pk-bar-row"><div class="pk-bar-label"><span>Depósitos</span><span></span></div><div class="pk-bar-track"><div class="pk-bar-fill dep"></div></div></div>
+              <div class="pk-bar-row"><div class="pk-bar-label"><span>Retiros</span><span></span></div><div class="pk-bar-track"><div class="pk-bar-fill ret"></div></div></div>
+              <div class="pk-bar-row"><div class="pk-bar-label"><span>Pago de servicios</span><span></span></div><div class="pk-bar-track"><div class="pk-bar-fill pag"></div></div></div>
+              <ul class="pk-info-list mb-0" id="resumen-graf">
+                <li><span>Total ingresado</span><span class="pk-in"></span></li>
+                <li><span>Total egresado</span><span class="pk-out"></span></li>
+                <li><span>Saldo actual</span><span></span></li>
+              </ul>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <footer class="pk-footer">© 2026 Pokémon Bank · Proyecto de Cátedra UDB · Simulación con fines académicos</footer>
+    </main>
+
+    <!-- Barra inferior tipo kiosco (móvil y tableta) -->
+    <nav class="pk-tabbar d-lg-none" aria-label="Secciones">
+      <a href="#acciones" data-nav="acciones"><span class="pk-tab-ico"><svg class="pk-i"><use href="#i-home"/></svg></span><em>Inicio</em></a>
+      <a href="#historial" data-nav="historial"><span class="pk-tab-ico"><svg class="pk-i"><use href="#i-his"/></svg></span><em>Historial</em></a>
+      <a href="#grafico" data-nav="grafico"><span class="pk-tab-ico"><svg class="pk-i"><use href="#i-gra"/></svg></span><em>Gráfico</em></a>
+      <a href="#login" class="pk-tab-exit"><span class="pk-tab-ico"><svg class="pk-i"><use href="#i-out"/></svg></span><em>Salir</em></a>
+    </nav>
+  </div>
+
+  <!-- Confirmación y comprobante -->
+  <div id="pk-sheet" class="pk-sheet" role="dialog" aria-modal="true" aria-live="assertive" hidden>
+    <div class="pk-sheet-card" id="pk-sheet-body"></div>
+  </div>
+
+  <div id="pk-toast" class="pk-toast" role="status" aria-live="polite"></div>
+
+  <script src="js/main.js"></script>
+</body>
+</html>

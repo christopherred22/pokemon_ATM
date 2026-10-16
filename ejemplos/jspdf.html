@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>jsPDF | Ejemplos Pokémon Bank</title>
+  <link rel="stylesheet" href="../css/bootstrap.min.css">
+  <link rel="stylesheet" href="../css/styles.css">
+</head>
+<body>
+  <main class="container pk-main" style="max-width: 640px;">
+    <section class="pk-card">
+      <h1 class="h4">Ejemplo jsPDF</h1>
+      <p class="text-muted">Genera un comprobante de transacción en PDF directamente en el navegador.</p>
+      <button id="btn-pdf" class="pk-btn pk-btn-primary pk-btn-block">Descargar comprobante (PDF)</button>
+    </section>
+  </main>
+
+  <!-- jsPDF 2.5.1 (https://parall.ax/products/jspdf) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script>
+    document.getElementById("btn-pdf").addEventListener("click", function () {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+
+      doc.setFontSize(20);
+      doc.text("Pokemon Bank - Comprobante", 20, 25);
+
+      doc.setFontSize(12);
+      doc.text("Titular: Ash Ketchum", 20, 45);
+      doc.text("Cuenta: PKB-2026-000151", 20, 55);
+      doc.text("Transaccion: Deposito", 20, 65);
+      doc.text("Monto: $300.00", 20, 75);
+      doc.text("Saldo resultante: $908.80", 20, 85);
+      doc.text("Fecha: 05/10/2026 08:15", 20, 95);
+
+      doc.save("comprobante-pokemon-bank.pdf");
+    });
+  </script>
+</body>
+</html>
