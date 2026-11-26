@@ -41,6 +41,7 @@
   <!-- =====================================================================
        APLICACIÓN DE UNA SOLA PÁGINA
        js/main.js muestra una vista según el enlace (#...) y exige el PIN.
+       Los datos del titular se leen de LocalStorage (js/datos.js).
        ===================================================================== -->
 
   <!-- ================= PANTALLA 1: LOGIN ================= -->
@@ -65,7 +66,7 @@
 
           <button type="submit" id="btn-login" class="btn pk-btn pk-btn-yellow btn-block">Ingresar</button>
 
-          <p class="pk-demo"><strong>Usuario de prueba:</strong> Ash Ketchum · PIN <strong>1234</strong></p>
+          <p class="pk-demo">PIN de prueba: <strong>1234</strong></p>
         </form>
       </section>
     </main>
@@ -82,8 +83,8 @@
         <span>Pokémon Bank</span>
       </a>
       <div class="pk-side-user">
-        <div class="pk-avatar" aria-hidden="true">AK</div>
-        <div><strong>Ash Ketchum</strong><small>PKB-2026-000151</small></div>
+        <div class="pk-avatar" aria-hidden="true" data-user="iniciales"></div>
+        <div><strong data-user="nombre"></strong><small data-user="cuenta"></small></div>
       </div>
       <nav class="pk-side-nav" aria-label="Secciones">
         <a href="#acciones" data-nav="acciones"><svg class="pk-i"><use href="#i-home"/></svg>Inicio</a>
@@ -96,7 +97,7 @@
     <!-- Barra superior (móvil y tableta) -->
     <header class="pk-topbar d-flex d-lg-none">
       <img src="images/pokeball.svg" alt="">
-      <div><strong>Ash Ketchum</strong><small>PKB-2026-000151</small></div>
+      <div><strong data-user="nombre"></strong><small data-user="cuenta"></small></div>
     </header>
 
     <!-- ===== Contenido ===== -->
@@ -110,8 +111,8 @@
             <span class="pk-hero-tag">Cuenta de ahorro</span>
           </div>
           <small>Bienvenido a tu cajero</small>
-          <h1 id="t-acciones">Ash Ketchum</h1>
-          <div class="pk-acct">N.º de cuenta <span>PKB-2026-000151</span></div>
+          <h1 id="t-acciones" data-user="nombre"></h1>
+          <div class="pk-acct">N.º de cuenta <span data-user="cuenta"></span></div>
         </article>
 
         <h2 class="pk-h2">¿Qué deseas hacer?</h2>
@@ -197,7 +198,7 @@
             <label class="pk-label" for="monto-retiro">Escribe el monto</label>
             <div class="pk-display"><span>$</span>
               <input type="text" id="monto-retiro" name="monto" class="form-control" inputmode="none" autocomplete="off"
-                     pattern="[0-9]{1,3}" placeholder="0" aria-describedby="ayuda-ret">
+                     pattern="[0-9]{1,3}" placeholder="0" maxlength="3" aria-describedby="ayuda-ret">
             </div>
             <small id="ayuda-ret" class="pk-help pk-help-left">Múltiplos de $5</small>
             <div class="pk-keypad" data-for="monto-retiro" data-dot="0" aria-label="Teclado numérico"></div>
@@ -222,15 +223,18 @@
         <div class="pk-flow-body">
           <div class="pk-balance">
             <small>Saldo disponible</small>
-            <div class="pk-amount" data-saldo></div>
+            <div class="pk-amount" id="monto-saldo"></div>
           </div>
           <ul class="pk-info-list">
-            <li><span>Titular</span><span>Ash Ketchum</span></li>
-            <li><span>N.º de cuenta</span><span>PKB-2026-000151</span></li>
+            <li><span>Titular</span><span data-user="nombre"></span></li>
+            <li><span>N.º de cuenta</span><span data-user="cuenta"></span></li>
             <li><span>Tipo de cuenta</span><span>Ahorro</span></li>
             <li><span>Fecha de consulta</span><span id="fecha-saldo"></span></li>
           </ul>
-          <div class="pk-flow-foot"><a href="#acciones" class="btn pk-btn pk-btn-primary btn-block">Aceptar</a></div>
+          <div class="pk-flow-foot">
+            <button type="button" class="btn pk-btn pk-btn-light" id="btn-pdf-saldo">Comprobante PDF</button>
+            <a href="#acciones" class="btn pk-btn pk-btn-primary">Aceptar</a>
+          </div>
         </div>
       </section>
 
@@ -300,7 +304,7 @@
         </section>
 
         <div class="pk-actions">
-          <button type="button" id="btn-reset" class="btn pk-btn pk-btn-light">Restablecer datos de prueba</button>
+          <button type="button" id="btn-reset" class="btn pk-btn pk-btn-light">Restablecer datos</button>
           <a class="btn pk-btn pk-btn-primary" href="#grafico">Ver gráfico</a>
         </div>
       </section>
@@ -312,35 +316,33 @@
           <p class="text-muted mb-0">Tus operaciones por tipo</p>
         </header>
 
-        <div class="row">
-          <div class="col-lg-6 mb-3">
-            <section class="card pk-panel h-100" aria-labelledby="g1">
-              <h2 id="g1" class="pk-h2">Transacciones por tipo</h2>
-              <div class="pk-donut-wrap">
-                <div class="pk-donut" data-total="0" role="img" aria-label="Gráfico de dona"></div>
-                <ul class="pk-legend">
-                  <li><i class="c-dep"></i> Depósitos <em></em></li>
-                  <li><i class="c-ret"></i> Retiros <em></em></li>
-                  <li><i class="c-pag"></i> Pago de servicios <em></em></li>
-                  <li><i class="c-sal"></i> Consultas de saldo <em></em></li>
-                </ul>
-              </div>
-            </section>
-          </div>
+        <div class="card pk-panel pk-empty" id="grafico-vacio">
+          <p class="mb-3">Aún no hay transacciones para graficar.</p>
+          <div><a class="btn pk-btn pk-btn-primary" href="#acciones">Hacer una transacción</a></div>
+        </div>
 
-          <div class="col-lg-6 mb-3">
-            <section class="card pk-panel h-100" aria-labelledby="g2">
-              <h2 id="g2" class="pk-h2">Monto acumulado por tipo</h2>
-              <div class="pk-bar-row"><div class="pk-bar-label"><span>Depósitos</span><span></span></div><div class="pk-bar-track"><div class="pk-bar-fill dep"></div></div></div>
-              <div class="pk-bar-row"><div class="pk-bar-label"><span>Retiros</span><span></span></div><div class="pk-bar-track"><div class="pk-bar-fill ret"></div></div></div>
-              <div class="pk-bar-row"><div class="pk-bar-label"><span>Pago de servicios</span><span></span></div><div class="pk-bar-track"><div class="pk-bar-fill pag"></div></div></div>
-              <ul class="pk-info-list mb-0" id="resumen-graf">
-                <li><span>Total ingresado</span><span class="pk-in"></span></li>
-                <li><span>Total egresado</span><span class="pk-out"></span></li>
-                <li><span>Saldo actual</span><span></span></li>
-              </ul>
-            </section>
+        <div id="grafico-datos">
+          <div class="row">
+            <div class="col-lg-6 mb-3">
+              <section class="card pk-panel h-100" aria-labelledby="g1">
+                <h2 id="g1" class="pk-h2">Número de transacciones por tipo</h2>
+                <div class="pk-chart"><canvas id="grafico-cantidad" role="img"></canvas></div>
+              </section>
+            </div>
+            <div class="col-lg-6 mb-3">
+              <section class="card pk-panel h-100" aria-labelledby="g2">
+                <h2 id="g2" class="pk-h2">Monto acumulado por tipo</h2>
+                <div class="pk-chart"><canvas id="grafico-monto" role="img"></canvas></div>
+              </section>
+            </div>
           </div>
+          <section class="card pk-panel" aria-label="Totales">
+            <ul class="pk-info-list m-0">
+              <li><span>Transacciones realizadas</span><span id="total-operaciones"></span></li>
+              <li><span>Total ingresado</span><span class="pk-in" id="total-ingresado"></span></li>
+              <li><span>Total egresado</span><span class="pk-out" id="total-egresado"></span></li>
+            </ul>
+          </section>
         </div>
       </section>
 
@@ -356,13 +358,18 @@
     </nav>
   </div>
 
-  <!-- Confirmación y comprobante -->
-  <div id="pk-sheet" class="pk-sheet" role="dialog" aria-modal="true" aria-live="assertive" hidden>
-    <div class="pk-sheet-card" id="pk-sheet-body"></div>
-  </div>
+  <!-- Librerías de la Fase 2 (versiones fijas, copia local en js/vendor/) -->
+  <script src="js/vendor/sweetalert.min.js"></script>
+  <script src="js/vendor/validate.min.js"></script>
+  <script src="js/vendor/jspdf.umd.min.js"></script>
+  <script src="js/vendor/chart.umd.js"></script>
 
-  <div id="pk-toast" class="pk-toast" role="status" aria-live="polite"></div>
-
+  <!-- Código propio: el orden importa (main.js usa los módulos anteriores) -->
+  <script src="js/datos.js"></script>
+  <script src="js/validaciones.js"></script>
+  <script src="js/comprobante.js"></script>
+  <script src="js/dialogos.js"></script>
+  <script src="js/graficos.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>

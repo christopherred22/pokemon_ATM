@@ -1,7 +1,7 @@
 /* ==========================================================================
    Pokémon Bank - Simulador de Cajero Automático (ATM)
    Universidad Don Bosco - Lenguajes Interpretados en el Cliente
-   Proyecto de Cátedra (HTML5 + CSS3 + Bootstrap 4)
+   Proyecto de Cátedra (HTML5 + CSS3 + Bootstrap 4 + JavaScript)
 
    Bootstrap 4 aporta la rejilla responsive (container, row, col-*), los
    botones (btn), tarjetas (card), formularios (form-control) y utilidades
@@ -316,21 +316,30 @@ body[data-flow="1"] .pk-content { padding-bottom: 2rem; }
 .pk-info-list li span:first-child { color: var(--pk-muted); }
 .pk-info-list li span:last-child { font-weight: 800; text-align: right; }
 
-/* ---------- 10. Confirmación y comprobante ---------- */
-.pk-sheet { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center; padding: 1rem; background: rgba(12, 16, 60, .72); backdrop-filter: blur(6px); animation: pk-fade .2s; }
-.pk-sheet-card { width: 100%; max-width: 440px; max-height: 94vh; overflow: auto; padding: 1.5rem; border-radius: 28px; background: #fff; box-shadow: 0 30px 70px rgba(5, 8, 40, .5); animation: pk-up .3s cubic-bezier(.2, 1, .3, 1); text-align: center; }
-.pk-sheet-card h2 { font-size: 1.35rem; margin-bottom: .6rem; }
-.pk-sheet-rows { margin: 0; text-align: left; }
-.pk-sheet-rows div { display: flex; justify-content: space-between; gap: 1rem; padding: .6rem 0; border-bottom: 1px dashed var(--pk-line); }
+/* ---------- 10. Diálogos (SweetAlert con la identidad del banco) ---------- */
+.swal-overlay { background: rgba(12, 16, 60, .72); }
+.swal-modal { width: min(460px, calc(100vw - 24px)); max-height: 94vh; overflow-y: auto; border-radius: 28px; }
+.swal-title { color: var(--pk-navy); font-size: 1.35rem; font-weight: 800; }
+.swal-text { color: var(--pk-muted); text-align: center; white-space: pre-line; }
+.swal-content { margin: 12px 0 0; padding: 0 20px; }
+.swal-footer { display: flex; justify-content: center; flex-wrap: wrap; gap: .5rem; margin-top: 8px; text-align: center; }
+.swal-button-container { flex: 1 1 140px; margin: 0; }
+.swal-button { width: 100%; min-height: 50px; border-radius: 16px; font-size: 1rem; font-weight: 700; }
+.swal-button--confirm { background: var(--g-pag); color: #fff; }
+.swal-button--confirm:not([disabled]):hover { background: #2a3db5; }
+.swal-button--danger { background: var(--g-ret); }
+.swal-button--danger:not([disabled]):hover { background: #b8260f; }
+.swal-button--cancel { background: #fff; color: var(--pk-navy); border: 2px solid var(--pk-line); }
+.swal-button:focus { box-shadow: 0 0 0 3px var(--pk-yellow), 0 0 0 5px rgba(20, 26, 90, .55); }
+
+.pk-sheet-rows { margin: 0; padding: .3rem 1rem; text-align: left; border-radius: 18px; background: #f6f8ff; border: 2px dashed var(--pk-line); }
+.pk-sheet-rows div { display: flex; justify-content: space-between; gap: 1rem; padding: .45rem 0; border-bottom: 1px dashed var(--pk-line); }
 .pk-sheet-rows div:last-child { border-bottom: 0; }
-.pk-sheet-rows dt { color: var(--pk-muted); font-weight: 600; }
-.pk-sheet-rows dd { margin: 0; font-weight: 800; text-align: right; }
-.pk-ticket { margin: .6rem 0 1.1rem; padding: .4rem 1rem; border-radius: 18px; background: #f6f8ff; border: 2px dashed var(--pk-line); }
-.pk-check { width: 84px; height: 84px; margin: 0 auto .6rem; display: grid; place-items: center; border-radius: 50%; color: #fff; background: var(--g-dep); box-shadow: 0 10px 24px rgba(10, 125, 88, .4); animation: pk-pop .45s cubic-bezier(.3, 1.8, .5, 1); }
-.pk-check .pk-i { width: 44px; height: 44px; stroke-width: 3; }
-@keyframes pk-fade { from { opacity: 0; } to { opacity: 1; } }
-@keyframes pk-up { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
-@keyframes pk-pop { from { transform: scale(.3); } to { transform: scale(1); } }
+.pk-sheet-rows dt { color: var(--pk-muted); font-weight: 600; font-size: .9rem; }
+.pk-sheet-rows dd { margin: 0; font-weight: 800; font-size: .9rem; text-align: right; color: var(--pk-navy); }
+.pk-pdf-botones { display: flex; gap: .5rem; margin-top: .8rem; }
+.pk-pdf-botones .pk-btn { flex: 1; min-height: 48px; padding: .4rem .6rem; font-size: .95rem; }
+.pk-pdf-estado { min-height: 1.2em; margin: .5rem 0 0; font-size: .85rem; text-align: center; color: var(--pk-muted); }
 
 /* ---------- 11. Historial ---------- */
 .pk-stats { margin-left: -7px; margin-right: -7px; }
@@ -372,27 +381,10 @@ body[data-flow="1"] .pk-content { padding-bottom: 2rem; }
 .pk-actions { display: flex; flex-wrap: wrap; gap: .7rem; margin-top: 1.2rem; }
 .pk-actions .pk-btn { flex: 1 1 200px; }
 
-/* ---------- 12. Gráficos (solo CSS: conic-gradient) ---------- */
-.pk-donut-wrap { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 1.5rem; }
-.pk-donut { position: relative; width: 190px; height: 190px; flex: none; border-radius: 50%; background: #e8ebfa; box-shadow: 0 10px 24px rgba(20, 26, 90, .18); }
-.pk-donut::before { content: attr(data-total); position: absolute; inset: 28px; display: grid; place-items: center; padding-bottom: 1rem; border-radius: 50%; background: #fff; font-size: 2.4rem; font-weight: 800; color: var(--pk-navy); box-shadow: inset 0 3px 8px rgba(20, 26, 90, .1); }
-.pk-donut::after { content: "transacciones"; position: absolute; left: 0; right: 0; top: 57%; text-align: center; font-size: .72rem; color: var(--pk-muted); }
-.pk-legend { list-style: none; margin: 0; padding: 0; }
-.pk-legend li { display: flex; align-items: center; gap: .6rem; padding: .35rem 0; font-weight: 600; }
-.pk-legend em { margin-left: auto; padding-left: 1rem; font-style: normal; color: var(--pk-muted); font-weight: 700; }
-.pk-legend i { width: 14px; height: 14px; border-radius: 5px; flex: none; }
-.c-dep { background: var(--c-dep); } .c-ret { background: var(--c-ret); } .c-pag { background: var(--c-pag); } .c-sal { background: var(--c-sal); }
-.pk-bar-row { margin-bottom: 1rem; }
-.pk-bar-label { display: flex; justify-content: space-between; margin-bottom: .3rem; font-weight: 700; }
-.pk-bar-track { height: 16px; border-radius: 999px; background: #e8ebfa; overflow: hidden; }
-.pk-bar-fill { height: 100%; min-width: 4px; border-radius: 999px; background: var(--g-dep); transition: width .6s cubic-bezier(.2, 1, .3, 1); }
-.pk-bar-fill.ret { background: var(--g-ret); }
-.pk-bar-fill.pag { background: var(--g-pag); }
-
-/* ---------- 13. Avisos ---------- */
-.pk-toast { position: fixed; left: 50%; top: 14px; z-index: 200; max-width: min(92vw, 460px); padding: .8rem 1.2rem; border-radius: 16px; color: #fff; font-weight: 700; background: var(--pk-navy); box-shadow: 0 12px 30px rgba(0, 0, 0, .35); transform: translate(-50%, -200%); opacity: 0; pointer-events: none; transition: transform .3s cubic-bezier(.2, 1, .3, 1), opacity .2s; }
-.pk-toast.show { transform: translate(-50%, 0); opacity: 1; }
-.pk-toast.error { background: #b8260f; }
+/* ---------- 12. Gráficos (Chart.js) y botón de comprobante ---------- */
+.pk-chart { position: relative; height: 300px; }
+.pk-tx-pdf { flex: none; min-width: 48px; min-height: 44px; padding: .2rem .5rem; border: 2px solid var(--pk-line); border-radius: 14px; font-size: .75rem; font-weight: 800; color: var(--pk-blue); background: #fff; }
+.pk-tx-pdf:hover { border-color: var(--pk-blue); background: #f3f5ff; }
 
 /* ---------- 14. Compatibilidad con las páginas de ejemplos ---------- */
 .pk-main { padding-top: 1.75rem; padding-bottom: 2.5rem; }
@@ -410,11 +402,10 @@ body[data-flow="1"] .pk-content { padding-bottom: 2rem; }
   .pk-amount { font-size: 2.7rem; }
   .pk-amount-btn { height: 76px; font-size: 1.5rem; }
   .pk-display .form-control { font-size: 2.3rem; }
-  .pk-donut-wrap { flex-direction: column; }
-  .pk-legend { width: 100%; }
   .pk-flow-foot { flex-direction: column-reverse; }
-  .pk-sheet { align-items: flex-end; padding: 0; }
-  .pk-sheet-card { max-width: none; border-radius: 28px 28px 0 0; }
+  .pk-tx { gap: .55rem; }
+  .pk-tx-ico { width: 40px; height: 40px; }
+  .pk-chart { height: 280px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }

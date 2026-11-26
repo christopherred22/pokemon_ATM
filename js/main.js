@@ -1,399 +1,512 @@
 /* ==========================================================================
    Pokémon Bank - js/main.js
-   Lógica del cajero: sesión con PIN (3 intentos), navegación entre vistas,
-   depósito, retiro (límite diario), consulta de saldo y pago de servicios.
-   Cada operación pide confirmación, emite un comprobante y actualiza saldo,
-   historial y gráficos. Los datos se guardan en localStorage.
+   Controlador de la interfaz: sesión con PIN, navegación entre vistas,
+   teclado en pantalla y flujo de cada transacción:
+       validar -> confirmar -> registrar -> comprobante
+
+   Depende de (en este orden):
+     datos.js         LocalStorage y reglas del negocio
+     validaciones.js  reglas de Validate.js
+     comprobante.js   PDF con jsPDF
+     dialogos.js      diálogos con SweetAlert
+     graficos.js      gráficos con Chart.js
    ========================================================================== */
-(function () {
+(function (PB) {
   "use strict";
 
-  var PIN_CORRECTO = "1234";
-  var CLAVE = "pokemonbank_v1";          // saldo e historial
-  var CLAVE_BLOQUEO = "pokemonbank_lock"; // intentos fallidos de PIN
-  var SESION = "pokemonbank_sesion";     // sessionStorage: sesión activa
-  var MAX_INTENTOS = 3, BLOQUEO_MS = 30000, INACTIVIDAD_MS = 90000;
-  var LIMITE_DIARIO = 50000, MAX_DEPOSITO = 500000; // en centavos
-  var SERVICIOS = { energia: "Energía eléctrica", internet: "Internet", telefonia: "Telefonía", agua: "Agua potable" };
-  var ETIQ = { dep: "Depósito", ret: "Retiro", pag: "Servicio", sal: "Consulta" };
-  var ICONO = { dep: "i-dep", ret: "i-ret", pag: "i-pag", sal: "i-sal" };
-  var VISTAS = ["acciones", "deposito", "retiro", "saldo", "servicios", "historial", "grafico"];
-  var FLUJOS = ["deposito", "retiro", "saldo", "servicios"];
-  var TITULOS = { login: "Inicio de sesión", acciones: "Inicio", deposito: "Depósito", retiro: "Retiro", saldo: "Mi saldo", servicios: "Pago de servicios", historial: "Historial", grafico: "Gráfico" };
+  /* ---------- Configuración ---------- */
+  const CLAVE_BLOQUEO = "pokemonbank_bloqueo";  // intentos fallidos de PIN
+  const SESION = "pokemonbank_sesion";          // sessionStorage: sesión activa
+  const MAX_INTENTOS = 3, BLOQUEO_MS = 30000, INACTIVIDAD_MS = 90000, POR_PAGINA = 10;
+  const FLUJOS = ["deposito", "retiro", "saldo", "servicios"];
+  const VISTAS = ["acciones", ...FLUJOS, "historial", "grafico"];
+  const TITULOS = {
+    login: "Inicio de sesión", acciones: "Inicio", deposito: "Depósito", retiro: "Retiro",
+    saldo: "Mi saldo", servicios: "Pago de servicios", historial: "Historial", grafico: "Gráfico"
+  };
+  const { datos, formato, validar, dialogos } = PB;
 
-  /* ---------- Datos iniciales (usuario de prueba). Montos en centavos ---------- */
-  function datosIniciales() {
-    var t = function (f, tipo, det, monto, saldo) { return { f: f, tipo: tipo, det: det, monto: monto, saldo: saldo }; };
-    return {
-      saldo: 125075,
-      tx: [
-        t("05/10/2026 08:15", "dep", "Depósito en efectivo", 30000, 90880),
-        t("05/10/2026 08:20", "sal", "Consulta de saldo", 0, 90880),
-        t("06/10/2026 10:02", "ret", "Retiro en cajero", 6000, 84880),
-        t("07/10/2026 14:30", "pag", "Energía eléctrica", 4530, 80350),
-        t("07/10/2026 14:33", "pag", "Internet", 3000, 77350),
-        t("08/10/2026 09:12", "ret", "Retiro en cajero", 10000, 67350),
-        t("09/10/2026 16:45", "dep", "Depósito en efectivo", 50000, 117350),
-        t("09/10/2026 16:47", "sal", "Consulta de saldo", 0, 117350),
-        t("10/10/2026 11:20", "pag", "Agua potable", 1275, 116075),
-        t("11/10/2026 18:05", "pag", "Telefonía", 2000, 114075),
-        t("11/10/2026 18:10", "ret", "Retiro en cajero", 4000, 110075),
-        t("12/10/2026 07:55", "dep", "Depósito en efectivo", 15000, 125075),
-        t("12/10/2026 07:56", "sal", "Consulta de saldo", 0, 125075)
-      ]
-    };
+  /* ---------- Estado de la interfaz (los datos viven en datos.js) ---------- */
+  let vista = "login";
+  let filtro = "all";
+  let mostrar = POR_PAGINA;
+  let consultaActual = null;      // consulta de saldo que se está mostrando
+  let confirmando = false;        // hay una confirmación esperando respuesta
+  let temporizadorBloqueo, temporizadorInactividad;
+
+  /* ---------- Utilidades del DOM ---------- */
+  const $ = (selector, raiz) => (raiz || document).querySelector(selector);
+  const $$ = (selector, raiz) => Array.from((raiz || document).querySelectorAll(selector));
+  const escapar = (texto) => String(texto).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const icono = (id) => '<svg class="pk-i" aria-hidden="true"><use href="#' + id + '"/></svg>';
+  const poner = (selector, texto) => $$(selector).forEach((el) => { el.textContent = texto; });
+
+  /* sessionStorage / localStorage pueden estar bloqueados: nunca deben romper la app */
+  let sesionEnMemoria = false;
+  function sesionActiva() {
+    try { return sessionStorage.getItem(SESION) === "1"; } catch (e) { return sesionEnMemoria; }
+  }
+  function fijarSesion(activa) {
+    sesionEnMemoria = activa;
+    try {
+      if (activa) sessionStorage.setItem(SESION, "1"); else sessionStorage.removeItem(SESION);
+    } catch (e) { /* se usa la copia en memoria */ }
   }
 
-  var estado;
-  try { estado = JSON.parse(localStorage.getItem(CLAVE)); } catch (e) { estado = null; }
-  if (!estado || typeof estado.saldo !== "number" || !Array.isArray(estado.tx)) estado = datosIniciales();
-
-  function guardar() { try { localStorage.setItem(CLAVE, JSON.stringify(estado)); } catch (e) { /* sin almacenamiento */ } }
-
-  /* ---------- Utilidades ---------- */
-  function $(s, r) { return (r || document).querySelector(s); }
-  function $$(s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); }
-  function dinero(c) { return "$" + (c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-  function aCentavos(v) { return /^\d+(\.\d{1,2})?$/.test(v) ? Math.round(parseFloat(v) * 100) : NaN; }
-  function dos(n) { return (n < 10 ? "0" : "") + n; }
-  function fechaHora() { var d = new Date(); return dos(d.getDate()) + "/" + dos(d.getMonth() + 1) + "/" + d.getFullYear() + " " + dos(d.getHours()) + ":" + dos(d.getMinutes()); }
-  function soloFecha() { return fechaHora().split(" ")[0]; }
-  function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
-  function icono(id) { return '<svg class="pk-i" aria-hidden="true"><use href="#' + id + '"/></svg>'; }
-  function sesionActiva() { try { return sessionStorage.getItem(SESION) === "1"; } catch (e) { return false; } }
-
-  var toastTimer;
-  function aviso(texto, error) {
-    var t = $("#pk-toast"); if (!t) return;
-    t.textContent = texto; t.className = "pk-toast show" + (error ? " error" : "");
-    clearTimeout(toastTimer); toastTimer = setTimeout(function () { t.className = "pk-toast" + (error ? " error" : ""); }, 3500);
+  /* =====================================================================
+     1. Presentación de los datos del usuario
+     ===================================================================== */
+  function importe(t) {
+    const signo = datos.TIPOS[t.tipo].signo;
+    if (signo === 0) return '<b class="pk-zero">—</b>';
+    return '<b class="' + (signo > 0 ? "pk-in" : "pk-out") + '">' + (signo > 0 ? "+" : "−") + formato.dinero(t.monto) + "</b>";
   }
 
-  function retiradoHoy() {
-    var hoy = soloFecha();
-    return estado.tx.reduce(function (s, x) { return s + (x.tipo === "ret" && x.f.slice(0, 10) === hoy ? x.monto : 0); }, 0);
+  function pintarTitular(usuario) {
+    poner('[data-user="nombre"]', usuario ? usuario.nombre : "");
+    poner('[data-user="cuenta"]', usuario ? usuario.cuenta : "");
+    poner('[data-user="iniciales"]', usuario ? usuario.nombre.split(" ").map((p) => p[0]).join("") : "");
   }
 
-  function registrar(tipo, detalle, monto) {
-    if (tipo === "dep") estado.saldo += monto;
-    if (tipo === "ret" || tipo === "pag") estado.saldo -= monto;
-    var tx = { f: fechaHora(), tipo: tipo, det: detalle, monto: monto, saldo: estado.saldo };
-    estado.tx.push(tx);
-    guardar(); pintar();
-    return tx;
+  function pintarHistorial(usuario) {
+    const filas = usuario.transacciones
+      .filter((t) => filtro === "all" || t.tipo === filtro)
+      .reverse()                                   // la más reciente primero
+      .map((t) => {
+        const numero = formato.numeroOperacion(t.id);
+        return '<li class="pk-tx t-' + t.tipo + '"><span class="pk-tx-ico">' + icono("i-" + t.tipo) + "</span>" +
+          '<div class="pk-tx-main"><strong>' + escapar(t.detalle) + '</strong><small><span class="pk-tag ' + t.tipo + '">' +
+          datos.TIPOS[t.tipo].nombre + "</span> " + formato.fechaHora(t.fecha) + " · N.º " + numero + "</small></div>" +
+          '<div class="pk-tx-amt">' + importe(t) + "<small>Saldo " + formato.dinero(t.saldo) + "</small></div>" +
+          '<button type="button" class="btn pk-tx-pdf" data-pdf="' + t.id + '" aria-label="Ver comprobante de la operación ' + numero + '">PDF</button></li>';
+      });
+    const vacio = usuario.transacciones.length ? "No hay transacciones de este tipo." : "Aún no has realizado transacciones.";
+    $("#lista-tx").innerHTML = filas.slice(0, mostrar).join("") || '<li class="pk-empty">' + vacio + "</li>";
+    $("#btn-mas").hidden = filas.length <= mostrar;
   }
 
-  /* ---------- Pintar historial, resumen, saldo y gráficos ---------- */
-  var filtro = "all", mostrar = 10;
+  function pintarUltimo(usuario) {
+    const t = usuario.transacciones[usuario.transacciones.length - 1];
+    $("#ultimo").innerHTML = t
+      ? '<span class="pk-tx-ico t-' + t.tipo + '">' + icono("i-" + t.tipo) + '</span><div class="pk-tx-main"><small>Último movimiento</small><strong>' +
+        escapar(t.detalle) + "</strong><small>" + formato.fechaHora(t.fecha) + '</small></div><div class="pk-tx-amt">' + importe(t) + "<small>Ver historial ›</small></div>"
+      : '<span class="pk-tx-ico t-sal">' + icono("i-his") + '</span><div class="pk-tx-main"><strong>Aún no tienes movimientos</strong><small>Tus transacciones aparecerán aquí</small></div>';
+  }
 
+  function pintarResumen(usuario) {
+    const r = datos.resumen(usuario.transacciones);
+    ["dep", "ret", "pag"].forEach((tipo) => {
+      const tarjeta = $(".pk-stat." + tipo);
+      $("strong", tarjeta).textContent = formato.dinero(r[tipo].total);
+      $("span", tarjeta).textContent = r[tipo].cantidad + (r[tipo].cantidad === 1 ? " transacción" : " transacciones");
+    });
+    $(".pk-stat.sal strong").textContent = r.sal.cantidad;
+
+    poner("#total-ingresado", "+" + formato.dinero(r.dep.total));
+    poner("#total-egresado", "−" + formato.dinero(r.ret.total + r.pag.total));
+    poner("#total-operaciones", usuario.transacciones.length);
+
+    const hayDatos = usuario.transacciones.length > 0;
+    $("#grafico-vacio").hidden = hayDatos;
+    $("#grafico-datos").hidden = !hayDatos;
+    // Chart.js necesita que el lienzo sea visible para calcular su tamaño
+    if (vista === "grafico" && hayDatos && !PB.graficos.actualizar(r)) {
+      dialogos.error("No se pudo mostrar el gráfico", "No se cargó Chart.js. Revisa que exista la carpeta js/vendor.");
+    }
+  }
+
+  /* Vuelve a dibujar todo con lo que hay en LocalStorage. Sin sesión no se
+     muestra ningún dato del titular. */
   function pintar() {
-    var tot = { dep: 0, ret: 0, pag: 0, sal: 0 }, cant = { dep: 0, ret: 0, pag: 0, sal: 0 };
-    estado.tx.forEach(function (x) { tot[x.tipo] += x.monto; cant[x.tipo]++; });
-
-    // Lista (la más reciente primero)
-    var filas = [];
-    for (var i = estado.tx.length - 1; i >= 0; i--) {
-      var x = estado.tx[i];
-      if (filtro !== "all" && x.tipo !== filtro) continue;
-      var signo = x.tipo === "dep" ? "+" : "−";
-      var monto = x.tipo === "sal" ? '<b class="pk-zero">—</b>' : '<b class="' + (x.tipo === "dep" ? "pk-in" : "pk-out") + '">' + signo + dinero(x.monto) + "</b>";
-      filas.push('<li class="pk-tx t-' + x.tipo + '"><span class="pk-tx-ico">' + icono(ICONO[x.tipo]) + '</span>' +
-        '<div class="pk-tx-main"><strong>' + esc(x.det) + '</strong><small><span class="pk-tag ' + x.tipo + '">' + ETIQ[x.tipo] + "</span> " + esc(x.f) + " · N.º " + ("00" + (i + 1)).slice(-3) + "</small></div>" +
-        '<div class="pk-tx-amt">' + monto + "<small>Saldo " + dinero(x.saldo) + "</small></div></li>");
-    }
-    var lista = $("#lista-tx");
-    if (lista) lista.innerHTML = filas.slice(0, mostrar).join("") || '<li class="pk-empty">Aún no hay transacciones de este tipo.</li>';
-    var mas = $("#btn-mas"); if (mas) mas.hidden = filas.length <= mostrar;
-
-    // Tarjetas de resumen
-    ["dep", "ret", "pag"].forEach(function (k) {
-      var c = $(".pk-stat." + k); if (!c) return;
-      $("strong", c).textContent = dinero(tot[k]); $("span", c).textContent = cant[k] + " transacciones";
-    });
-    var cs = $(".pk-stat.sal"); if (cs) $("strong", cs).textContent = cant.sal;
-
-    // Último movimiento (pantalla de acciones)
-    var u = estado.tx[estado.tx.length - 1], ul = $("#ultimo");
-    if (ul && u) ul.innerHTML = '<span class="pk-tx-ico t-' + u.tipo + '">' + icono(ICONO[u.tipo]) + "</span>" +
-      '<div class="pk-tx-main"><small>Último movimiento</small><strong>' + esc(u.det) + "</strong><small>" + esc(u.f) + "</small></div>" +
-      '<div class="pk-tx-amt"><b>' + (u.tipo === "sal" ? dinero(u.saldo) : (u.tipo === "dep" ? "+" : "−") + dinero(u.monto)) + "</b><small>Ver historial ›</small></div>";
-
-    // Saldo y datos de consulta
-    $$("[data-saldo]").forEach(function (el) { el.innerHTML = "<sup>$</sup>" + dinero(estado.saldo).slice(1); });
-    var fs = $("#fecha-saldo"); if (fs) fs.textContent = soloFecha();
-    var dh = $("#disp-hoy"); if (dh) dh.textContent = dinero(Math.max(0, LIMITE_DIARIO - retiradoHoy()));
-
-    // Gráfico de dona
-    var n = estado.tx.length, dona = $(".pk-donut");
-    if (dona && n) {
-      var p1 = cant.dep / n * 100, p2 = p1 + cant.ret / n * 100, p3 = p2 + cant.pag / n * 100;
-      dona.style.background = "conic-gradient(var(--c-dep) 0 " + p1 + "%, var(--c-ret) " + p1 + "% " + p2 + "%, var(--c-pag) " + p2 + "% " + p3 + "%, var(--c-sal) " + p3 + "% 100%)";
-      dona.setAttribute("data-total", n);
-      dona.setAttribute("aria-label", "Gráfico de dona: depósitos " + cant.dep + ", retiros " + cant.ret + ", pago de servicios " + cant.pag + " y consultas de saldo " + cant.sal);
-    }
-    ["dep", "ret", "pag", "sal"].forEach(function (k, i) {
-      var em = $(".pk-legend li:nth-child(" + (i + 1) + ") em");
-      if (em) em.textContent = cant[k] + " · " + (n ? Math.round(cant[k] / n * 100) : 0) + "%";
-    });
-
-    // Barras de monto
-    var max = Math.max(tot.dep, tot.ret, tot.pag, 1);
-    ["dep", "ret", "pag"].forEach(function (k, i) {
-      var fila = $$(".pk-bar-row")[i]; if (!fila) return;
-      $(".pk-bar-label span:last-child", fila).textContent = dinero(tot[k]);
-      $(".pk-bar-fill", fila).style.width = (tot[k] / max * 100) + "%";
-    });
-    var res = $$("#resumen-graf li span:last-child");
-    if (res[0]) res[0].textContent = "+" + dinero(tot.dep);
-    if (res[1]) res[1].textContent = "−" + dinero(tot.ret + tot.pag);
-    if (res[2]) res[2].textContent = dinero(estado.saldo);
+    if (!sesionActiva()) { pintarTitular(null); return; }
+    const usuario = datos.obtener();
+    pintarTitular(usuario);
+    pintarHistorial(usuario);
+    pintarUltimo(usuario);
+    pintarResumen(usuario);
+    $("#monto-saldo").innerHTML = "<sup>$</sup>" + formato.dinero(usuario.saldo).slice(1);
+    poner("#disp-hoy", formato.dinero(datos.disponibleHoy(usuario)));
+    poner("#fecha-saldo", consultaActual ? formato.fechaHora(consultaActual.fecha) : "");
   }
 
-  /* ---------- Confirmación y comprobante (hoja a pantalla completa) ---------- */
-  var hoja = $("#pk-sheet"), hojaCuerpo = $("#pk-sheet-body"), alConfirmar = null;
-
-  function abrirHoja(html) {
-    hojaCuerpo.innerHTML = html; hoja.hidden = false;
-    var b = $("[data-ok], [data-done]", hojaCuerpo); if (b) b.focus();
-  }
-  function cerrarHoja() { hoja.hidden = true; alConfirmar = null; }
-
-  function filasHtml(filas) {
-    return '<dl class="pk-sheet-rows">' + filas.map(function (f) { return "<div><dt>" + esc(f[0]) + "</dt><dd>" + esc(f[1]) + "</dd></div>"; }).join("") + "</dl>";
-  }
-
-  function confirmar(titulo, filas, textoOk, fn, peligro) {
-    alConfirmar = fn;
-    abrirHoja('<h2>' + esc(titulo) + "</h2>" + filasHtml(filas) +
-      '<div class="pk-flow-foot"><button type="button" class="btn pk-btn pk-btn-light" data-cancel>Cancelar</button>' +
-      '<button type="button" class="btn pk-btn ' + (peligro ? "pk-btn-danger" : "pk-btn-primary") + '" data-ok>' + esc(textoOk) + "</button></div>");
-  }
-
-  function comprobante(tx) {
-    var num = ("00" + estado.tx.length).slice(-3);
-    var filas = [["Operación", ETIQ[tx.tipo]], ["Detalle", tx.det]];
-    if (tx.tipo !== "sal") filas.push(["Monto", dinero(tx.monto)]);
-    filas.push(["Saldo actual", dinero(tx.saldo)], ["Fecha", tx.f], ["Titular", "Ash Ketchum"], ["Cuenta", "PKB-2026-000151"], ["N.º de operación", num]);
-    abrirHoja('<div class="pk-check">' + icono("i-ok") + "</div><h2>¡Operación exitosa!</h2>" +
-      '<div class="pk-ticket">' + filasHtml(filas) + "</div>" +
-      '<button type="button" class="btn pk-btn pk-btn-primary btn-block" data-done>Listo</button>');
-  }
-
-  if (hoja) hoja.addEventListener("click", function (e) {
-    if (e.target.closest("[data-cancel]")) return cerrarHoja();
-    if (e.target.closest("[data-ok]")) { var fn = alConfirmar; alConfirmar = null; if (fn) fn(); return; }
-    if (e.target.closest("[data-done]")) { cerrarHoja(); irA("acciones"); }
-  });
-  document.addEventListener("keydown", function (e) { if (e.key === "Escape" && hoja && !hoja.hidden) cerrarHoja(); });
-
-  /* ---------- Operaciones: validar -> confirmar -> registrar -> comprobante ---------- */
-  function irA(vista) { if (window.location.hash === "#" + vista) ruta(); else window.location.hash = "#" + vista; }
-
-  function pedirDeposito(m) {
-    if (!(m > 0)) return aviso("Ingresa un monto válido.", true);
-    if (m > MAX_DEPOSITO) return aviso("El máximo por depósito es $5,000.00.", true);
-    confirmar("¿Confirmar depósito?", [["Monto", dinero(m)], ["Saldo después", dinero(estado.saldo + m)]], "Depositar", function () {
-      comprobante(registrar("dep", "Depósito en efectivo", m));
+  /* =====================================================================
+     2. Transacciones: validar -> confirmar -> registrar -> comprobante
+     ===================================================================== */
+  function marcarErrores(formulario, errores) {
+    $$("[name]", formulario).forEach((campo) => {
+      campo.classList.toggle("is-invalid", Boolean(errores && errores[campo.name]));
     });
   }
 
-  function pedirRetiro(m) {
-    if (!(m > 0)) return aviso("Elige o escribe un monto.", true);
-    if (m % 500 !== 0) return aviso("El monto debe ser múltiplo de $5.", true);
-    if (m > LIMITE_DIARIO) return aviso("El límite por retiro es de $500.00.", true);
-    var libre = LIMITE_DIARIO - retiradoHoy();
-    if (m > libre) return aviso("Superas tu límite diario. Hoy puedes retirar " + dinero(Math.max(0, libre)) + " más.", true);
-    if (m > estado.saldo) return aviso("Fondos insuficientes. Saldo: " + dinero(estado.saldo), true);
-    confirmar("¿Confirmar retiro?", [["Monto", dinero(m)], ["Saldo después", dinero(estado.saldo - m)]], "Retirar", function () {
-      comprobante(registrar("ret", "Retiro en cajero", m));
+  /* Muestra los errores de Validate.js; devuelve true si hubo alguno. */
+  function rechazar(errores, formulario) {
+    if (formulario) marcarErrores(formulario, errores);
+    if (!errores) return false;
+    dialogos.error("Revisa los datos", Object.values(errores).join("\n"));
+    return true;
+  }
+
+  /* operacion = { titulo, boton, filas, tipo, detalle, monto, revalidar } */
+  function procesar(operacion) {
+    const saldo = datos.obtener().saldo;
+    const saldoDespues = saldo + datos.TIPOS[operacion.tipo].signo * operacion.monto;
+    confirmando = true;
+    dialogos.confirmar({
+      titulo: operacion.titulo,
+      boton: operacion.boton,
+      filas: [...operacion.filas, ["Monto", formato.dinero(operacion.monto)], ["Saldo después", formato.dinero(saldoDespues)]]
+    }).then((acepta) => {
+      confirmando = false;
+      if (!acepta || !sesionActiva()) return;
+      // Se valida de nuevo: el saldo pudo cambiar (por ejemplo, en otra pestaña)
+      if (rechazar(operacion.revalidar())) return;
+      const transaccion = datos.registrar(operacion.tipo, operacion.detalle, operacion.monto);
+      pintar();
+      dialogos.comprobante(transaccion, datos.obtener()).then(() => irA("acciones"));
     });
   }
 
-  function pedirServicio(clave, contrato, m) {
-    if (!clave) return aviso("Selecciona el servicio a pagar.", true);
-    if (!/^\d{6,12}$/.test(contrato)) return aviso("El contrato debe tener entre 6 y 12 dígitos.", true);
-    if (!(m > 0)) return aviso("Ingresa un monto válido.", true);
-    if (m > estado.saldo) return aviso("Fondos insuficientes. Saldo: " + dinero(estado.saldo), true);
-    confirmar("¿Confirmar pago?", [["Servicio", SERVICIOS[clave]], ["Contrato", contrato], ["Monto", dinero(m)], ["Saldo después", dinero(estado.saldo - m)]], "Pagar", function () {
-      comprobante(registrar("pag", SERVICIOS[clave] + " · contrato …" + contrato.slice(-4), m));
+  function pedirDeposito(texto, formulario) {
+    const revisar = () => validar.deposito(texto);
+    if (rechazar(revisar(), formulario)) return;
+    procesar({
+      titulo: "¿Confirmar depósito?", boton: "Depositar", filas: [],
+      tipo: "dep", detalle: "Depósito en efectivo", monto: formato.aCentavos(texto), revalidar: revisar
     });
   }
 
-  var fDep = $("#form-deposito");
-  if (fDep) fDep.addEventListener("submit", function (e) { e.preventDefault(); pedirDeposito(aCentavos($("#monto-deposito").value)); });
-
-  var fRet = $("#form-retiro");
-  if (fRet) fRet.addEventListener("submit", function (e) { e.preventDefault(); pedirRetiro(aCentavos($("#monto-retiro").value)); });
-
-  var fSer = $("#form-servicios");
-  if (fSer) fSer.addEventListener("submit", function (e) {
-    e.preventDefault();
-    var s = $('input[name="servicio"]:checked');
-    pedirServicio(s && s.value, $("#contrato").value, aCentavos($("#monto-servicio").value));
-  });
-
-  /* ---------- Botones de monto rápido y accesos ---------- */
-  document.addEventListener("click", function (e) {
-    var r = e.target.closest("[data-rapido]");
-    if (r) return pedirRetiro(aCentavos(r.getAttribute("data-rapido")));
-
-    var s = e.target.closest("[data-suma]");
-    if (s) {
-      var inp = $("#monto-deposito"), actual = parseFloat(inp.value) || 0;
-      inp.value = String(Math.round((actual + parseFloat(s.getAttribute("data-suma"))) * 100) / 100);
-      return;
-    }
-    // La consulta de saldo se registra al tocar «Mi saldo» (no al volver atrás en el navegador)
-    if (e.target.closest("[data-consulta]") && sesionActiva()) registrar("sal", "Consulta de saldo", 0);
-  });
-
-  var bOtro = $("#btn-otro");
-  if (bOtro) bOtro.addEventListener("click", function () {
-    var panel = $("#otro-monto"); panel.hidden = false; bOtro.hidden = true; $("#foot-ret").hidden = true;
-    bOtro.setAttribute("aria-expanded", "true"); $("#monto-retiro").focus();
-  });
-
-  /* ---------- Teclado numérico en pantalla ---------- */
-  function armarTeclado(kp) {
-    var punto = kp.getAttribute("data-dot") !== "0", h = "";
-    ["1", "2", "3", "4", "5", "6", "7", "8", "9"].forEach(function (k) { h += '<button type="button" class="pk-key" data-k="' + k + '">' + k + "</button>"; });
-    h += punto ? '<button type="button" class="pk-key pk-key-aux" data-k=".">.</button>' : '<button type="button" class="pk-key pk-key-aux" data-k="clr" aria-label="Borrar todo">C</button>';
-    h += '<button type="button" class="pk-key" data-k="0">0</button>';
-    h += '<button type="button" class="pk-key pk-key-aux" data-k="del" aria-label="Borrar un dígito">' + icono("i-del") + "</button>";
-    kp.innerHTML = h;
+  function pedirRetiro(texto, formulario) {
+    const revisar = () => {
+      const usuario = datos.obtener();
+      return validar.retiro(texto, usuario.saldo, datos.disponibleHoy(usuario));
+    };
+    if (rechazar(revisar(), formulario)) return;
+    procesar({
+      titulo: "¿Confirmar retiro?", boton: "Retirar", filas: [],
+      tipo: "ret", detalle: "Retiro en cajero", monto: formato.aCentavos(texto), revalidar: revisar
+    });
   }
-  $$(".pk-keypad").forEach(armarTeclado);
 
-  // Evita que el toque en una tecla quite el foco del campo
-  document.addEventListener("mousedown", function (e) { if (e.target.closest(".pk-key")) e.preventDefault(); });
-
-  document.addEventListener("click", function (e) {
-    var b = e.target.closest(".pk-key"); if (!b) return;
-    var kp = b.closest(".pk-keypad"), inp = $("#" + kp.getAttribute("data-for")), k = b.getAttribute("data-k");
-    if (!inp || inp.disabled) return;
-    var punto = kp.getAttribute("data-dot") !== "0", v = inp.value;
-    if (k === "del") v = v.slice(0, -1);
-    else if (k === "clr") v = "";
-    else if (k === ".") { if (v.indexOf(".") < 0) v = (v || "0") + "."; }
-    else v += k;
-    if (punto) v = v.replace(/^0+(?=\d)/, "");   // «05» -> «5» solo en montos (el PIN y el contrato conservan ceros)
-    if (inp.maxLength > 0 && v.length > inp.maxLength) return;
-    if (punto && !/^\d{0,5}(\.\d{0,2})?$/.test(v)) return;
-    inp.value = v;
-    inp.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-
-  // En el pago de servicios el teclado escribe en el último campo tocado
-  $$("[data-pad]").forEach(function (inp) {
-    inp.addEventListener("focus", function () {
-      var kp = $("#pad-servicios"); kp.setAttribute("data-for", inp.id);
-      kp.setAttribute("data-dot", inp.id === "contrato" ? "0" : "1"); armarTeclado(kp);
+  function pedirServicio(valores, formulario) {
+    const revisar = () => validar.servicio(valores, datos.obtener().saldo);
+    if (rechazar(revisar(), formulario)) return;
+    const nombre = datos.SERVICIOS[valores.servicio];
+    procesar({
+      titulo: "¿Confirmar pago?", boton: "Pagar",
+      filas: [["Servicio", nombre], ["Contrato", valores.contrato]],
+      tipo: "pag", detalle: nombre + " (contrato " + valores.contrato + ")",
+      monto: formato.aCentavos(valores.monto), revalidar: revisar
     });
-  });
+  }
 
-  // Con el teclado físico solo se aceptan dígitos (y un punto en los montos)
-  $$("#pin, #monto-deposito, #monto-retiro, #monto-servicio, #contrato").forEach(function (inp) {
-    inp.addEventListener("input", function () {
-      var permite = inp.id === "monto-deposito" || inp.id === "monto-servicio";
-      inp.value = inp.value.replace(permite ? /[^\d.]/g : /\D/g, "");
-    });
-  });
+  /* La consulta se registra al tocar «Mi saldo» */
+  function consultarSaldo() {
+    consultaActual = datos.registrar("sal", "Consulta de saldo", 0);
+    irA("saldo");
+  }
 
-  /* ---------- Login: PIN con 3 intentos y bloqueo temporal ---------- */
-  var pin = $("#pin"), errPin = $("#pin-error"), btnLogin = $("#btn-login"), cuenta;
+  /* =====================================================================
+     3. Teclado numérico en pantalla
+     ===================================================================== */
+  function armarTeclado(teclado) {
+    const conPunto = teclado.dataset.dot !== "0";
+    const tecla = (k, contenido, clase, etiqueta) => '<button type="button" class="pk-key ' + (clase || "") + '" data-k="' + k + '"' +
+      (etiqueta ? ' aria-label="' + etiqueta + '"' : "") + ">" + contenido + "</button>";
+    teclado.innerHTML = ["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((k) => tecla(k, k)).join("") +
+      (conPunto ? tecla(".", ".", "pk-key-aux") : tecla("clr", "C", "pk-key-aux", "Borrar todo")) +
+      tecla("0", "0") + tecla("del", icono("i-del"), "pk-key-aux", "Borrar un dígito");
+  }
 
-  function leerBloqueo() { try { return JSON.parse(localStorage.getItem(CLAVE_BLOQUEO)) || { fallos: 0, hasta: 0 }; } catch (e) { return { fallos: 0, hasta: 0 }; } }
-  function guardarBloqueo(b) { try { localStorage.setItem(CLAVE_BLOQUEO, JSON.stringify(b)); } catch (e) { /* sin almacenamiento */ } }
-  function mostrarError(t) { errPin.textContent = t; errPin.hidden = !t; }
+  function pulsarTecla(boton) {
+    const teclado = boton.closest(".pk-keypad");
+    const campo = document.getElementById(teclado.dataset.for);
+    if (!campo || campo.disabled) return;
+    const esMonto = teclado.dataset.dot !== "0";
+    const k = boton.dataset.k;
+    let valor = campo.value;
+    if (k === "del") valor = valor.slice(0, -1);
+    else if (k === "clr") valor = "";
+    else if (k === ".") { if (!valor.includes(".")) valor = (valor || "0") + "."; }
+    else valor += k;
+    if (esMonto) valor = valor.replace(/^0+(?=\d)/, "");  // el PIN y el contrato conservan ceros
+    if (campo.maxLength > 0 && valor.length > campo.maxLength) return;
+    if (esMonto && !/^\d{0,5}(\.\d{0,2})?$/.test(valor)) return;
+    campo.value = valor;
+    campo.dispatchEvent(new Event("input", { bubbles: true }));
+  }
 
+  /* =====================================================================
+     4. Inicio de sesión: PIN con 3 intentos y bloqueo temporal
+     ===================================================================== */
+  const campoPin = () => $("#pin");
+
+  function leerBloqueo() {
+    try { return JSON.parse(localStorage.getItem(CLAVE_BLOQUEO)) || { fallos: 0, hasta: 0 }; }
+    catch (e) { return { fallos: 0, hasta: 0 }; }
+  }
+  function guardarBloqueo(bloqueo) {
+    try { localStorage.setItem(CLAVE_BLOQUEO, JSON.stringify(bloqueo)); } catch (e) { /* sin almacenamiento */ }
+  }
+  function mensajePin(texto) {
+    const caja = $("#pin-error");
+    caja.textContent = texto;
+    caja.hidden = !texto;
+  }
+
+  /* Actualiza la cuenta regresiva; devuelve true mientras siga bloqueado. */
   function revisarBloqueo() {
-    clearInterval(cuenta);
-    var b = leerBloqueo(), resta = Math.ceil((b.hasta - Date.now()) / 1000);
-    var bloqueado = resta > 0;
-    pin.disabled = btnLogin.disabled = bloqueado;
-    $$("#login .pk-key").forEach(function (k) { k.disabled = bloqueado; });
+    clearTimeout(temporizadorBloqueo);
+    const bloqueo = leerBloqueo();
+    const segundos = Math.ceil((bloqueo.hasta - Date.now()) / 1000);
+    const bloqueado = segundos > 0;
+    campoPin().disabled = bloqueado;
+    $("#btn-login").disabled = bloqueado;
+    $$("#login .pk-key").forEach((k) => { k.disabled = bloqueado; });
     if (bloqueado) {
-      mostrarError("Demasiados intentos. Espera " + resta + " s para volver a intentarlo.");
-      cuenta = setInterval(revisarBloqueo, 1000);
-    } else if (b.hasta) { guardarBloqueo({ fallos: 0, hasta: 0 }); mostrarError(""); }
+      mensajePin("Demasiados intentos. Espera " + segundos + " s para volver a intentarlo.");
+      temporizadorBloqueo = setTimeout(revisarBloqueo, 1000);
+    } else {
+      if (bloqueo.hasta) guardarBloqueo({ fallos: 0, hasta: 0 });
+      mensajePin("");
+    }
     return bloqueado;
   }
 
-  var fLogin = $("#form-login");
-  if (fLogin) fLogin.addEventListener("submit", function (e) {
-    e.preventDefault();
-    if (revisarBloqueo()) return;
-    if (!/^\d{4}$/.test(pin.value)) { mostrarError("El PIN debe tener exactamente 4 dígitos."); return; }
-    if (pin.value === PIN_CORRECTO) {
-      guardarBloqueo({ fallos: 0, hasta: 0 }); mostrarError(""); pin.value = "";
-      try { sessionStorage.setItem(SESION, "1"); } catch (err) { /* sin almacenamiento */ }
+  function iniciarSesion() {
+    if (dialogos.hayDialogo() || revisarBloqueo()) return;
+    const valor = campoPin().value;
+    const errores = validar.pin(valor);
+    if (errores) { dialogos.error("PIN no válido", errores.pin); return; }
+
+    const usuario = datos.obtener();
+    campoPin().value = "";
+    if (valor === usuario.pin) {
+      guardarBloqueo({ fallos: 0, hasta: 0 });
+      fijarSesion(true);
       irA("acciones");
+      dialogos.exito("¡Bienvenido, " + usuario.nombre + "!", "Cuenta N.º " + usuario.cuenta, 2500);
       return;
     }
-    var b = leerBloqueo(); b.fallos++;
-    pin.value = "";
-    if (b.fallos >= MAX_INTENTOS) { guardarBloqueo({ fallos: 0, hasta: Date.now() + BLOQUEO_MS }); revisarBloqueo(); }
-    else { guardarBloqueo(b); mostrarError("PIN incorrecto. Te quedan " + (MAX_INTENTOS - b.fallos) + (MAX_INTENTOS - b.fallos === 1 ? " intento." : " intentos.")); }
-  });
-  // Al escribir el 4.º dígito se envía solo (como en un cajero real)
-  if (pin) pin.addEventListener("input", function () { if (pin.value.length === 4) setTimeout(function () { fLogin.requestSubmit(); }, 180); });
 
-  /* ---------- Sesión: cierre manual y por inactividad ---------- */
-  var inactivo;
-  function reiniciarInactividad() {
-    clearTimeout(inactivo);
-    if (!sesionActiva()) return;
-    inactivo = setTimeout(function () { cerrarSesion(); aviso("Sesión cerrada por inactividad.", true); }, INACTIVIDAD_MS);
+    const fallos = leerBloqueo().fallos + 1;
+    if (fallos >= MAX_INTENTOS) {
+      guardarBloqueo({ fallos: 0, hasta: Date.now() + BLOQUEO_MS });
+      revisarBloqueo();
+      dialogos.error("Cajero bloqueado", "Fallaste " + MAX_INTENTOS + " veces. Espera 30 segundos para volver a intentarlo.");
+    } else {
+      guardarBloqueo({ fallos: fallos, hasta: 0 });
+      const quedan = MAX_INTENTOS - fallos;
+      dialogos.error("PIN incorrecto", "Te " + (quedan === 1 ? "queda 1 intento." : "quedan " + quedan + " intentos."));
+    }
   }
-  function cerrarSesion() { try { sessionStorage.removeItem(SESION); } catch (e) { /* nada */ } cerrarHoja(); irA("login"); }
-  ["pointerdown", "keydown"].forEach(function (ev) { document.addEventListener(ev, reiniciarInactividad); });
 
-  /* ---------- Historial: filtro, «ver más» y restablecer ---------- */
-  $$("[data-filtro]").forEach(function (b) {
-    b.addEventListener("click", function () {
-      filtro = b.getAttribute("data-filtro"); mostrar = 10;
-      $$("[data-filtro]").forEach(function (o) { var on = o === b; o.classList.toggle("active", on); o.setAttribute("aria-pressed", on); });
-      pintar();
-    });
-  });
-  var bMas = $("#btn-mas"); if (bMas) bMas.addEventListener("click", function () { mostrar += 10; pintar(); });
+  /* =====================================================================
+     5. Sesión: salida e inactividad
+     ===================================================================== */
+  function cerrarSesion() {
+    fijarSesion(false);
+    consultaActual = null;
+    irA("login");
+  }
 
-  var bReset = $("#btn-reset");
-  if (bReset) bReset.addEventListener("click", function () {
-    confirmar("¿Restablecer datos?", [["Se restaurarán", "Saldo e historial de prueba"]], "Restablecer", function () {
-      estado = datosIniciales(); guardar(); pintar(); cerrarHoja(); aviso("Datos de prueba restablecidos.");
-    }, true);
-  });
+  function pedirSalida() {
+    dialogos.confirmar({ titulo: "¿Salir del cajero?", texto: "Tendrás que ingresar tu PIN nuevamente.", boton: "Salir", peligro: true })
+      .then((acepta) => { if (acepta) cerrarSesion(); });
+  }
 
-  /* ---------- Navegación entre vistas (según el # de la dirección) ---------- */
-  function limpiarFlujo(v) {
-    $$("form", $("#" + v)).forEach(function (f) { f.reset(); });
-    if (v === "retiro") { $("#otro-monto").hidden = true; $("#btn-otro").hidden = false; $("#foot-ret").hidden = false; $("#btn-otro").setAttribute("aria-expanded", "false"); }
-    if (v === "servicios") { var kp = $("#pad-servicios"); kp.setAttribute("data-for", "contrato"); kp.setAttribute("data-dot", "0"); armarTeclado(kp); }
+  function reiniciarInactividad() {
+    clearTimeout(temporizadorInactividad);
+    if (!sesionActiva()) return;
+    temporizadorInactividad = setTimeout(() => {
+      dialogos.cerrar();
+      confirmando = false;
+      cerrarSesion();
+      dialogos.aviso("Sesión cerrada", "Por tu seguridad cerramos la sesión tras un momento sin actividad.");
+    }, INACTIVIDAD_MS);
+  }
+
+  /* =====================================================================
+     6. Navegación entre vistas (según el # de la dirección)
+     ===================================================================== */
+  function limpiarFlujo(nombre) {
+    $$("form", $("#" + nombre)).forEach((formulario) => { formulario.reset(); marcarErrores(formulario, null); });
+    if (nombre === "retiro") {
+      $("#otro-monto").hidden = true;
+      $("#foot-ret").hidden = false;
+      $("#btn-otro").hidden = false;
+      $("#btn-otro").setAttribute("aria-expanded", "false");
+    }
+    if (nombre === "servicios") apuntarTeclado("contrato");
+  }
+
+  /* En el pago de servicios el teclado escribe en el último campo tocado */
+  function apuntarTeclado(idCampo) {
+    const teclado = $("#pad-servicios");
+    teclado.dataset.for = idCampo;
+    teclado.dataset.dot = idCampo === "contrato" ? "0" : "1";
+    armarTeclado(teclado);
   }
 
   function ruta() {
-    var h = window.location.hash.slice(1) || "login";
-    if (h === "login" && sesionActiva()) { try { sessionStorage.removeItem(SESION); } catch (e) { /* nada */ } }
-    if (h !== "login" && !sesionActiva()) h = "login";
-    if (h !== "login" && VISTAS.indexOf(h) < 0) h = "acciones";
-    if (window.location.hash !== "#" + h) history.replaceState(null, "", "#" + h);
+    let destino = window.location.hash.slice(1) || "login";
+    if (destino === "login" && sesionActiva()) fijarSesion(false);
+    if (destino !== "login" && !sesionActiva()) destino = "login";
+    if (destino !== "login" && !VISTAS.includes(destino)) destino = "acciones";
+    // El saldo solo se muestra como resultado de una consulta registrada
+    if (destino === "saldo" && !consultaActual) destino = "acciones";
+    if (destino !== "saldo") consultaActual = null;
+    if (window.location.hash !== "#" + destino) history.replaceState(null, "", "#" + destino);
 
-    $("#login").hidden = h !== "login";
-    $("#app").hidden = h === "login";
-    VISTAS.forEach(function (v) { $("#" + v).hidden = v !== h; });
-    document.body.setAttribute("data-view", h);
-    document.title = (TITULOS[h] || "Cajero automático") + " | Pokémon Bank";
-    document.body.setAttribute("data-flow", FLUJOS.indexOf(h) >= 0 ? "1" : "0");
-    $$("[data-nav]").forEach(function (a) {
-      var on = a.getAttribute("data-nav") === (FLUJOS.indexOf(h) >= 0 ? "acciones" : h);
-      a.classList.toggle("active", on); if (on) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+    const cambio = destino !== vista;
+    vista = destino;
+    $("#login").hidden = vista !== "login";
+    $("#app").hidden = vista === "login";
+    VISTAS.forEach((v) => { $("#" + v).hidden = v !== vista; });
+    document.body.dataset.view = vista;
+    document.body.dataset.flow = FLUJOS.includes(vista) ? "1" : "0";
+    document.title = TITULOS[vista] + " | Pokémon Bank";
+    $$("[data-nav]").forEach((enlace) => {
+      const activo = enlace.dataset.nav === (FLUJOS.includes(vista) ? "acciones" : vista);
+      enlace.classList.toggle("active", activo);
+      if (activo) enlace.setAttribute("aria-current", "page"); else enlace.removeAttribute("aria-current");
     });
-    if (FLUJOS.indexOf(h) >= 0) limpiarFlujo(h);
-    if (h === "login") { pin.value = ""; if (!revisarBloqueo()) mostrarError(""); }
-    pintar(); reiniciarInactividad(); window.scrollTo({ top: 0, behavior: "instant" });
-  }
-  window.addEventListener("hashchange", ruta);
 
-  ruta();
-})();
+    if (cambio && FLUJOS.includes(vista)) limpiarFlujo(vista);
+    if (vista === "login") { campoPin().value = ""; revisarBloqueo(); }
+    pintar();
+    reiniciarInactividad();
+    if (cambio) window.scrollTo({ top: 0, behavior: "instant" });
+  }
+
+  function irA(destino) {
+    if (window.location.hash !== "#" + destino) history.pushState(null, "", "#" + destino);
+    ruta();
+  }
+
+  /* =====================================================================
+     7. Eventos
+     ===================================================================== */
+  function alHacerClic(evento) {
+    const buscar = (selector) => evento.target.closest(selector);
+    let el;
+
+    if ((el = buscar(".pk-key"))) return pulsarTecla(el);
+    if ((el = buscar("[data-rapido]"))) return pedirRetiro(el.dataset.rapido);
+    if ((el = buscar("[data-suma]"))) {
+      const campo = $("#monto-deposito");
+      campo.value = String(Math.round(((Number(campo.value) || 0) + Number(el.dataset.suma)) * 100) / 100);
+      return undefined;
+    }
+    if (buscar("[data-consulta]")) { evento.preventDefault(); return consultarSaldo(); }
+    if (buscar('a[href="#login"]')) { evento.preventDefault(); return pedirSalida(); }
+    if (buscar("#btn-pdf-saldo")) return dialogos.comprobante(consultaActual, datos.obtener(), "Comprobante de consulta");
+    if ((el = buscar("[data-pdf]"))) {
+      const usuario = datos.obtener();
+      const transaccion = usuario.transacciones.find((t) => t.id === Number(el.dataset.pdf));
+      return dialogos.comprobante(transaccion, usuario, "Comprobante");
+    }
+    return undefined;
+  }
+
+  function conectarFormularios() {
+    $("#form-login").addEventListener("submit", (e) => { e.preventDefault(); iniciarSesion(); });
+    // Al escribir el 4.º dígito el PIN se envía solo, como en un cajero real
+    campoPin().addEventListener("input", () => {
+      if (campoPin().value.length === 4) setTimeout(() => { if (campoPin().value.length === 4) iniciarSesion(); }, 180);
+    });
+
+    $("#form-deposito").addEventListener("submit", (e) => {
+      e.preventDefault();
+      pedirDeposito($("#monto-deposito").value, e.currentTarget);
+    });
+    $("#form-retiro").addEventListener("submit", (e) => {
+      e.preventDefault();
+      pedirRetiro($("#monto-retiro").value, e.currentTarget);
+    });
+    $("#form-servicios").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const elegido = $('input[name="servicio"]:checked');
+      pedirServicio({
+        servicio: elegido ? elegido.value : "",
+        contrato: $("#contrato").value,
+        monto: $("#monto-servicio").value
+      }, e.currentTarget);
+    });
+
+    // Con el teclado físico solo se aceptan dígitos (y un punto en los montos)
+    $$("#pin, #monto-deposito, #monto-retiro, #monto-servicio, #contrato").forEach((campo) => {
+      const aceptaPunto = campo.id === "monto-deposito" || campo.id === "monto-servicio";
+      campo.addEventListener("input", () => {
+        campo.value = campo.value.replace(aceptaPunto ? /[^\d.]/g : /\D/g, "");
+        campo.classList.remove("is-invalid");
+      });
+    });
+    $$("[data-pad]").forEach((campo) => campo.addEventListener("focus", () => apuntarTeclado(campo.id)));
+  }
+
+  function conectarBotones() {
+    document.addEventListener("click", alHacerClic);
+    // Evita que el toque en una tecla le quite el foco al campo
+    document.addEventListener("mousedown", (e) => { if (e.target.closest(".pk-key")) e.preventDefault(); });
+    ["pointerdown", "keydown"].forEach((nombre) => document.addEventListener(nombre, reiniciarInactividad));
+
+    $("#btn-otro").addEventListener("click", () => {
+      $("#otro-monto").hidden = false;
+      $("#foot-ret").hidden = true;
+      $("#btn-otro").hidden = true;
+      $("#btn-otro").setAttribute("aria-expanded", "true");
+      $("#monto-retiro").focus();
+    });
+
+    $$("[data-filtro]").forEach((boton) => boton.addEventListener("click", () => {
+      filtro = boton.dataset.filtro;
+      mostrar = POR_PAGINA;
+      $$("[data-filtro]").forEach((otro) => {
+        otro.classList.toggle("active", otro === boton);
+        otro.setAttribute("aria-pressed", String(otro === boton));
+      });
+      pintar();
+    }));
+    $("#btn-mas").addEventListener("click", () => { mostrar += POR_PAGINA; pintar(); });
+
+    $("#btn-reset").addEventListener("click", () => {
+      dialogos.confirmar({
+        titulo: "¿Restablecer datos?", boton: "Restablecer", peligro: true,
+        texto: "El saldo volverá a $500.00 y se borrará el historial."
+      }).then((acepta) => {
+        if (!acepta) return;
+        datos.reiniciar();
+        pintar();
+        dialogos.exito("Datos restablecidos", "Tu saldo es " + formato.dinero(datos.obtener().saldo) + ".");
+      });
+    });
+  }
+
+  /* =====================================================================
+     8. Arranque
+     ===================================================================== */
+  function iniciar() {
+    // SweetAlert y Validate.js son indispensables para operar con seguridad
+    if (!window.swal || !window.validate) {
+      mensajePin("No se pudieron cargar las librerías. Revisa que exista la carpeta js/vendor y recarga la página.");
+      $("#btn-login").disabled = true;
+      return;
+    }
+    validar.iniciar();
+    $$(".pk-keypad").forEach(armarTeclado);
+    conectarFormularios();
+    conectarBotones();
+
+    // Atrás/adelante del navegador: se cancela cualquier confirmación abierta
+    window.addEventListener("popstate", () => {
+      if (confirmando) { confirmando = false; dialogos.cerrar(); }
+      ruta();
+    });
+    window.addEventListener("hashchange", () => { if (window.location.hash.slice(1) !== vista) ruta(); });
+    // Si los datos cambian en otra pestaña, se actualiza la pantalla
+    window.addEventListener("storage", pintar);
+    ruta();
+  }
+
+  iniciar();
+})(window.PB);
