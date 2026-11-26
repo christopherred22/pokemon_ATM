@@ -17,7 +17,7 @@
   </main>
 
   <!-- jsPDF 2.5.1 (https://parall.ax/products/jspdf) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="../js/vendor/jspdf.umd.min.js"></script>
   <script>
     document.getElementById("btn-pdf").addEventListener("click", function () {
       const { jsPDF } = window.jspdf;
@@ -28,10 +28,10 @@
 
       doc.setFontSize(12);
       doc.text("Titular: Ash Ketchum", 20, 45);
-      doc.text("Cuenta: PKB-2026-000151", 20, 55);
+      doc.text("Cuenta: 0987654321", 20, 55);
       doc.text("Transaccion: Deposito", 20, 65);
       doc.text("Monto: $300.00", 20, 75);
-      doc.text("Saldo resultante: $908.80", 20, 85);
+      doc.text("Saldo resultante: $800.00", 20, 85);
       doc.text("Fecha: 05/10/2026 08:15", 20, 95);
 
       doc.save("comprobante-pokemon-bank.pdf");
